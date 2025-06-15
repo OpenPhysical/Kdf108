@@ -162,13 +162,6 @@ public sealed class DoublePipelineKdf : IKdf
 
             byte[] block = prf.Compute(kdk, prfInput);
 
-            if (i == 1)
-            {
-                Console.WriteLine("A(1): " + ConvertCompat.ToHexString(aValues[1]));
-                Console.WriteLine("PRF INPUT (block 1): " + ConvertCompat.ToHexString(prfInput));
-                Console.WriteLine("PRF OUTPUT (block 1): " + ConvertCompat.ToHexString(block));
-            }
-
             Buffer.BlockCopy(block, 0, resultBuffer, offset, outputSizeBytes);
             offset += outputSizeBytes;
         }

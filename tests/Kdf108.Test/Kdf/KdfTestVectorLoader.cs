@@ -59,6 +59,13 @@ public static class KdfTestVectorLoader
         return ParseVectorsFromLines(lines, mode, hasCounter);
     }
 
+    /// <summary>
+    /// Parses a list of test vector lines and produces a collection of KDF test vectors.
+    /// </summary>
+    /// <param name="lines">The list of lines representing test vectors, excluding comments and empty lines.</param>
+    /// <param name="mode">The mode of the test vectors, specifying the type of KDF operation.</param>
+    /// <param name="hasCounter">A flag indicating whether the test vector includes a counter.</param>
+    /// <returns>A collection of KdfTestVector representing the parsed test vectors.</returns>
     private static IEnumerable<KdfTestVector> ParseVectorsFromLines(List<string> lines, TestVectorMode mode,
         bool hasCounter)
     {

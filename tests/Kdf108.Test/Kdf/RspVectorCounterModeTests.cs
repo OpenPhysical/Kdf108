@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using Kdf108.Domain.Kdf;
 using Kdf108.Domain.Kdf.Modes;
+using NUnit.Framework;
 
 #endregion
 

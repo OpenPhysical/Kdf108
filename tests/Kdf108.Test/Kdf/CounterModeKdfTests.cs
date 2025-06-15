@@ -9,6 +9,7 @@ using System.Text;
 using FluentValidation;
 using Kdf108.Domain.Kdf;
 using Kdf108.Internal;
+using NUnit.Framework;
 
 #endregion
 

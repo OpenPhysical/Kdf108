@@ -133,12 +133,6 @@ public sealed class FeedbackModeKdf : IKdf
             byte[] prfInput = CreatePrfInput(currentK, fixedInput, i, counterLengthBits, counterLocation, useCounter);
             currentK = prf.Compute(kdk, prfInput);
 
-            if (i == 1)
-            {
-                Console.WriteLine("PRF INPUT (block 1): " + ConvertCompat.ToHexString(prfInput));
-                Console.WriteLine("PRF OUTPUT (block 1): " + ConvertCompat.ToHexString(currentK));
-            }
-
             Buffer.BlockCopy(currentK, 0, resultBuffer, offset, outputSizeBytes);
             offset += outputSizeBytes;
         }
