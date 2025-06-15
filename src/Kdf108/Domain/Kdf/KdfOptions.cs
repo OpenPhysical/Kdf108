@@ -13,7 +13,7 @@ namespace Kdf108.Domain.Kdf;
 ///     Represents configuration options for a Key Derivation Function (KDF).
 /// </summary>
 [PublicAPI]
-public sealed record KdfOptions
+public sealed class KdfOptions
 {
     public KdfOptions()
     {

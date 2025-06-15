@@ -3,7 +3,7 @@
 
 namespace Kdf108.Domain.Kdf;
 
-public sealed record KdfRequest
+public sealed class KdfRequest
 {
     public KdfRequest(
         byte[] keyDerivationKey,
