@@ -1,0 +1,38 @@
+name: Publish NuGet Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # e.g., v1.0.0
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            7.0.x
+            6.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build (Release configuration)
+        run: dotnet build --no-restore -c Release
+
+      - name: Pack NuGet package
+        run: dotnet pack src/Kdf108/Kdf108.csproj --no-build -c Release -o ./nupkg
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
