@@ -1,0 +1,73 @@
+# Build outputs
+/src/Kdf108/bin/
+/src/Kdf108/obj/
+/tests/Kdf108.Test/bin/
+/tests/Kdf108.Test/obj/
+
+# Common artifacts
+*.nupkg
+*.snupkg
+*.log
+*.trx
+*.coverage
+*.coveragexml
+*.formatted.cs
+
+# IDE junk
+.vscode/
+*.user
+*.suo
+*.userprefs
+
+# User-specific stuff
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+
+# Generated files
+.idea/**/contentModel.xml
+
+# Sensitive or high-churn files
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+
+
+# NuGet / GitVersion
+.nuget/
+packages/
+*.nuspec
+*.psmdcp
+gitinfo.json
+nbgv.*.props
+nbgv.*.targets
+
+# Rider and ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Distribution / release
+/artifacts/
+/release/
+/publish/
+/dist/
+/tools/**/bin/
+/tools/**/obj/
+
+# Temporary
+*.tmp
+*.bak
+*.swp

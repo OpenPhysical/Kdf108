@@ -1,0 +1,11 @@
+# Respect .editorconfig line endings by disabling automatic normalization
+* text=auto eol=unset
+
+# Explicitly trust .editorconfig and preserve source file endings
+*.cs     text eol=unset
+*.csproj text eol=unset
+*.props  text eol=unset
+*.targets text eol=unset
+*.sln    text eol=unset
+.editorconfig text eol=lf
+.gitattributes text eol=lf
