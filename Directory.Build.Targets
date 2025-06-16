@@ -1,7 +1,5 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>10.0</LangVersion>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>false</ImplicitUsings>
   </PropertyGroup>
 </Project>
