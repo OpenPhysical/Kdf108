@@ -9,18 +9,19 @@ using JetBrains.Annotations;
 
 #endregion
 
-namespace Kdf108.Internal;
-
-public static class StringExtensions
+namespace Kdf108.Internal
 {
-    [PublicAPI]
-    public static byte[] ToUtf8(this string s)
+    public static class StringExtensions
     {
-        if (s is null)
+        [PublicAPI]
+        public static byte[] ToUtf8(this string s)
         {
-            throw new ArgumentNullException(nameof(s));
-        }
+            if (s is null)
+            {
+                throw new ArgumentNullException(nameof(s));
+            }
 
-        return s.Length == 0 ? new byte[0] : Encoding.UTF8.GetBytes(s);
+            return s.Length == 0 ? new byte[0] : Encoding.UTF8.GetBytes(s);
+        }
     }
 }

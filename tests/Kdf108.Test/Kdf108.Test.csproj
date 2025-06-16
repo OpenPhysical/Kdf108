@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <ImplicitUsings>false</ImplicitUsings>
-    <TargetFrameworks>net461;net6.0;net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
