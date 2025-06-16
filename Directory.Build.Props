@@ -23,11 +23,6 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-
-    <!-- C# language settings -->
-    <LangVersion>10.0</LangVersion>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>false</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
