@@ -3,6 +3,7 @@
   <PropertyGroup>
     <ImplicitUsings>false</ImplicitUsings>
     <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
