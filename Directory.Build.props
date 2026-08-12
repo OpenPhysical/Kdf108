@@ -1,20 +1,21 @@
 <Project>
   <PropertyGroup>
     <!-- Package metadata -->
-    <Authors>Mistial Developer</Authors>
+    <Authors>OpenPhysical</Authors>
     <Company>OpenPhysical</Company>
-    <Copyright>Copyright © 2025 Mistial Developer</Copyright>
+    <Copyright>Copyright © 2025-2026 Mistial Developer</Copyright>
     <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/OpenPhysical/Kdf108</PackageProjectUrl>
     <RepositoryUrl>https://github.com/OpenPhysical/Kdf108</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>KDF;NIST;SP800-108;KeyDerivation;Crypto;C#</PackageTags>
     <Description>.NET implementation of NIST SP 800-108 KDF with support for Feedback, Counter, and Double-Pipeline modes.</Description>
-    <PackageReleaseNotes>Initial release supporting .NET Framework 2.0+ and .NET Standard.</PackageReleaseNotes>
+    <PackageReleaseNotes>OpenPhysical AGPL v3 release with .NET 8, .NET 10, and .NET Standard 2.0 support.</PackageReleaseNotes>
     <PackageIcon>logo_64x64.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <!-- Build options -->
-    <Version>1.0.0</Version>
+    <Version>2.0.0</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <IncludeSymbols>true</IncludeSymbols>
@@ -26,7 +27,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="$(SolutionDir)assets/logo_64x64.png" Pack="true" PackagePath="" />
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.6.*" PrivateAssets="all" />
+    <None Include="$(MSBuildThisFileDirectory)assets/logo_64x64.png" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)COMMERCIAL-LICENSING.md" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
