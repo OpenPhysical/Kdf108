@@ -4,8 +4,9 @@
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 
 Kdf108 is a .NET implementation of NIST SP 800-108 key derivation functions, SP 800-56A
-elliptic-curve key agreement, and SP 800-56C key-derivation pipelines. It supports counter,
-feedback, and double-pipeline modes with HMAC and CMAC pseudorandom functions.
+finite-field and elliptic-curve key agreement, and SP 800-56C Rev. 2 key-derivation methods.
+It supports counter, feedback, and double-pipeline modes with HMAC and CMAC pseudorandom
+functions.
 
 ## Requirements
 
@@ -22,14 +23,17 @@ dotnet test --configuration Release
 
 ## Packages
 
-Kdf108 2.1 targets `net9.0` and `net10.0`. NuGet publishing follows signed
+Kdf108 3.0 targets `net9.0` and `net10.0`. NuGet publishing follows signed
 version tags after the complete build and test workflow passes.
 
 ## Conformance
 
-The test suite includes NIST CAVP SP 800-108 and SP 800-56A response vectors, plus SP 800-56C
-vectors. Passing these vectors demonstrates compatibility with those published test cases; it is
-not a NIST validation or endorsement.
+The test suite includes NIST CAVP SP 800-108 and SP 800-56A response vectors, independent
+SP 800-56C checks, and negative tests for rejected states. See the
+[standards coverage matrix](docs/standards-coverage.md) for the evidence boundary.
+
+Version 3 replaces the mutable SP 800-56C configuration surface with closed, immutable request
+types. See the [3.0 migration guide](docs/migration-v3.md).
 
 ## Project policies
 

@@ -1,6 +1,7 @@
 # SP 800-56C Test Vectors
 
-This directory contains test implementations for NIST SP 800-56C Rev 2 "Recommendation for Key-Derivation Methods in Key-Establishment Schemes".
+This directory contains tests for NIST SP 800-56C Rev. 2, plus clearly labelled historical
+Rev. 1 vectors.
 
 ## Test Vector Sources
 
@@ -29,24 +30,19 @@ The following HMAC algorithms are tested:
 - **HMAC-SHA256**: Test vectors validated
 - **HMAC-SHA512**: Test vectors validated
 
-The implementation uses the `Sp80056CHmacKdf` class which follows the SP 800-56C specification for HMAC-based key derivation.
+The Rev. 2 API is exercised by `Sp80056CTypedApiTests` through immutable one-step and two-step
+requests.
 
 ### Two-Step KDF
-SP 800-56C Rev 2 also defines a two-step key derivation method which is not covered by these test vectors.
+The unofficial vector files do not cover the Rev. 2 two-step method. Independent pinned-answer
+tests cover its extraction and expansion behavior.
 
 ## Implementation Notes
 
-The SP 800-56C One-Step KDF is implemented using the SP 800-56A Concatenation KDF (`Sp80056AConcatKdf`) which follows the same algorithm:
-- Counter || Z || FixedInfo pattern
-- 32-bit big-endian counter starting at 1
-- Hash-based derivation
-
-The implementation supports:
-- Hash-based KDF: SHA-1, SHA-224, SHA-256, SHA-384, SHA-512
-- HMAC-based KDF: HMAC-SHA1, HMAC-SHA256, HMAC-SHA384, HMAC-SHA512
-- Variable output lengths
-- Optional FixedInfo parameter
-- Optional salt parameter for HMAC-based KDF
+`Sp80056COneStep` implements the Rev. 2 `Counter || Z || FixedInfo` construction directly with
+a 32-bit big-endian counter starting at 1. The typed API supports the approved SHA-1, SHA-2,
+SHA-3, HMAC, KMAC128, and KMAC256 choices, including default or caller-supplied salts and
+non-octet output lengths.
 
 ## Running Tests
 
