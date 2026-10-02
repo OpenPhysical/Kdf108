@@ -1,0 +1,22 @@
+apiRules:
+- include:
+    uidRegex: ^Kdf108\.
+    type: Namespace
+- include:
+    uidRegex: ^Kdf108\.
+    type: Type
+- include:
+    uidRegex: ^Kdf108\.
+    type: Member
+- exclude:
+    uidRegex: ^Kdf108\.Internal
+    type: Namespace
+- exclude:
+    uidRegex: ^Kdf108\.Internal\.
+    type: Type
+- exclude:
+    uidRegex: ^Kdf108\.Test
+    type: Namespace
+- exclude:
+    uidRegex: ^Kdf108\.Exceptions\.Internal
+    type: Type

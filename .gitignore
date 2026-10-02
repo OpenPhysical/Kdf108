@@ -1,8 +1,6 @@
 # Build outputs
-/src/Kdf108/bin/
-/src/Kdf108/obj/
-/tests/Kdf108.Test/bin/
-/tests/Kdf108.Test/obj/
+**/bin/
+**/obj/
 
 # Common artifacts
 *.nupkg
@@ -71,3 +69,8 @@ Desktop.ini
 *.tmp
 *.bak
 *.swp
+
+# Documentation
+_site/
+docs/api/
+*.yml.manifest
