@@ -1,37 +1,38 @@
 // Copyright (c) 2025 Mistial Developer <opensource@mistial.dev>
 // SPDX-License-Identifier: AGPL-3.0-only
 
-#region
-
-using Org.BouncyCastle.Utilities.Encoders;
-
-#endregion
-
 namespace Kdf108.Internal
-    /// <summary>
-    ///     Provides utility methods for converting data between hexadecimal string
-    ///     representations and byte arrays.
-    /// </summary>
-    /// <remarks>
-    ///     This utility class offers two static methods:
-    ///     <c>FromHexString</c> and <c>ToHexString</c>. These methods specifically
-    ///     facilitate encoding and decoding operations that convert between byte arrays
-    ///     and their corresponding hexadecimal representations. The class leverages
-    ///     third-party utilities to handle the conversions with precision.
-    ///     Purpose-built for scenarios requiring the manipulation of cryptographic
-    ///     and binary data in hexadecimal format, the methods ensure efficient and
-    ///     reliable data transformations.
-    /// </remarks>
 {
 #if NET5_0_OR_GREATER
     using System;
 #endif
 
+    /// <summary>
+    /// Provides utility methods for converting data between hexadecimal string
+    /// representations and byte arrays.
+    /// </summary>
+    /// <remarks>
+    /// This utility class offers two static methods:
+    /// <c>FromHexString</c> and <c>ToHexString</c>. These methods facilitate
+    /// encoding and decoding operations that convert between byte arrays
+    /// and their corresponding hexadecimal representations.
+    /// </remarks>
     public static class ConvertCompat
     {
 #if NET5_0_OR_GREATER
 
+        /// <summary>
+        /// Converts a hexadecimal string to a byte array.
+        /// </summary>
+        /// <param name="hex">The hexadecimal string to convert.</param>
+        /// <returns>A byte array representing the hexadecimal string.</returns>
         public static byte[] FromHexString(string hex) => Convert.FromHexString(hex);
+        
+        /// <summary>
+        /// Converts a byte array to a hexadecimal string.
+        /// </summary>
+        /// <param name="data">The byte array to convert.</param>
+        /// <returns>A hexadecimal string representation of the byte array.</returns>
         public static string ToHexString(byte[] data) => Convert.ToHexString(data);
 #else
     public static byte[] FromHexString(string hex) => Hex.Decode(hex);
