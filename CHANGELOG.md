@@ -7,6 +7,7 @@ Notable changes for each release are documented here.
 ### Added
 
 - SP 800-56A elliptic-curve key agreement models, validation, and CAVP coverage.
+- SP 800-56A named safe-prime groups and assurance-bearing FIPS 186-type FFC domains.
 - SP 800-56C one-step and two-step key-derivation pipelines and test vectors.
 - Standards-safe SP 800-56C request types that prevent forbidden auxiliary-function and expansion combinations.
 - Typed factories, simplified key-derivation APIs, debug helpers, examples, and scenario documentation.

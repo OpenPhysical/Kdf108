@@ -28,6 +28,39 @@ public enum FfcSafePrimeGroup
     Ffdhe8192
 }
 
+/// <summary>The assurance obtained for FIPS 186-type domain parameters.</summary>
+public abstract class FfcDomainAssurance
+{
+    private FfcDomainAssurance() { }
+
+    public sealed class GeneratedOrValidated : FfcDomainAssurance
+    {
+        private readonly byte[] _seed;
+        internal GeneratedOrValidated(byte[] seed, int counter) { _seed = seed; Counter = counter; }
+        public int Counter { get; }
+        public byte[] ExportSeed() => (byte[])_seed.Clone();
+    }
+
+    public sealed class TrustedThirdParty : FfcDomainAssurance
+    {
+        internal TrustedThirdParty(string authority) => Authority = authority;
+        public string Authority { get; }
+    }
+
+    public static FfcDomainAssurance Fips186GenerationOrValidation(ReadOnlySpan<byte> seed, int counter)
+    {
+        if (seed.IsEmpty) throw new ArgumentException("FIPS 186 validation evidence requires the generation seed.", nameof(seed));
+        if (counter < 0) throw new ArgumentOutOfRangeException(nameof(counter));
+        return new GeneratedOrValidated(seed.ToArray(), counter);
+    }
+
+    public static FfcDomainAssurance TrustedAuthority(string authority)
+    {
+        if (string.IsNullOrWhiteSpace(authority)) throw new ArgumentException("The trusted authority must be identified.", nameof(authority));
+        return new TrustedThirdParty(authority);
+    }
+}
+
 /// <summary>A validated finite-field domain.</summary>
 public sealed class FfcDomain
 {
@@ -46,20 +79,49 @@ public sealed class FfcDomain
             [FfcSafePrimeGroup.Ffdhe8192] = DHStandardGroups.rfc7919_ffdhe8192
         };
 
-    private FfcDomain(FfcSafePrimeGroup group, DHParameters parameters)
+    private FfcDomain(FfcSafePrimeGroup? group, DHParameters parameters, FfcDomainAssurance? assurance)
     {
         Group = group;
         Parameters = parameters;
+        Assurance = assurance;
     }
 
-    public FfcSafePrimeGroup Group { get; }
+    public FfcSafePrimeGroup? Group { get; }
+    public bool IsNamedSafePrimeGroup => Group.HasValue;
+    public FfcDomainAssurance? Assurance { get; }
     internal DHParameters Parameters { get; }
     public int ModulusBits => Parameters.P.BitLength;
 
     public static FfcDomain Named(FfcSafePrimeGroup group) =>
         Groups.TryGetValue(group, out var parameters)
-            ? new FfcDomain(group, parameters)
+            ? new FfcDomain(group, parameters, null)
             : throw new ArgumentOutOfRangeException(nameof(group));
+
+    public static FfcDomain ImportFips186(
+        ReadOnlySpan<byte> p,
+        ReadOnlySpan<byte> q,
+        ReadOnlySpan<byte> g,
+        FfcDomainAssurance assurance)
+    {
+        ArgumentNullException.ThrowIfNull(assurance);
+        if (p.IsEmpty || q.IsEmpty || g.IsEmpty)
+            throw new ArgumentException("FFC domain parameters must be non-empty.");
+
+        var pValue = new BigInteger(1, p.ToArray());
+        var qValue = new BigInteger(1, q.ToArray());
+        var gValue = new BigInteger(1, g.ToArray());
+        if (pValue.BitLength != 2048 || qValue.BitLength is not (224 or 256))
+            throw new ArgumentException("FIPS 186-type parameters must use the FB or FC size set.");
+        if (!pValue.IsProbablePrime(100) || !qValue.IsProbablePrime(100))
+            throw new ArgumentException("FFC p and q must be prime.");
+        if (!pValue.Subtract(BigInteger.One).Mod(qValue).Equals(BigInteger.Zero))
+            throw new ArgumentException("FFC q must divide p - 1.");
+        if (gValue.CompareTo(BigInteger.Two) < 0 || gValue.CompareTo(pValue.Subtract(BigInteger.Two)) > 0 ||
+            !gValue.ModPow(qValue, pValue).Equals(BigInteger.One))
+            throw new ArgumentException("FFC g must generate the subgroup of order q.");
+
+        return new FfcDomain(null, new DHParameters(pValue, gValue, qValue), assurance);
+    }
 
     internal void ValidatePrivate(BigInteger x)
     {
@@ -253,10 +315,11 @@ public static class FfcKeyAgreement
     {
         if (domains.Length < 2)
             return;
-        var group = domains[0].Group;
+        var first = domains[0].Parameters;
         for (int i = 1; i < domains.Length; i++)
         {
-            if (domains[i].Group != group)
+            var candidate = domains[i].Parameters;
+            if (!candidate.P.Equals(first.P) || !Equals(candidate.Q, first.Q) || !candidate.G.Equals(first.G))
                 throw new ArgumentException("FFC keys must use the same domain parameters.");
         }
     }

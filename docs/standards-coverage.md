@@ -27,6 +27,9 @@ unofficial Rev. 1 vectors and remain labelled as such.
   encoding.
 - FFC DH and MQV primitives support the named safe-prime groups in Appendix D, with distinct
   static and ephemeral key types, subgroup validation, and fixed-width encoding.
+- Backward-compatible FB and FC FIPS 186-type domains can be imported only with explicit
+  generation/validation evidence or an identified trusted authority. Parameter sizes, primality,
+  subgroup divisibility, and generator order are checked on import.
 - FFC ephemeral, static, one-flow, hybrid, hybrid one-flow, MQV1, and MQV2 computations use
   role-specific entry points and the mandated shared-secret ordering.
 - Unilateral and bilateral key-confirmation `MacData` ordering, HMAC, KMAC, AES-CMAC,
