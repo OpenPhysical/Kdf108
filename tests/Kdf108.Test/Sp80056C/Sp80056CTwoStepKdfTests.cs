@@ -121,7 +121,7 @@ public class Sp80056CTwoStepKdfTests
             .WithLabel("TestLabel")
             .WithOutputLengthInBytes(48)
             .WithContext(new byte[] { 0x01, 0x02, 0x03 })
-            .UseTwoStepKdf(PrfType.HmacSha384, PrfType.HmacSha256)
+            .UseTwoStepKdf(PrfType.HmacSha384, PrfType.HmacSha384)
             .Build();
 
         // Act
@@ -167,11 +167,10 @@ public class Sp80056CTwoStepKdfTests
     }
 
     [Test]
-    public void DeriveKeyFromSharedSecret_NoSalt_UsesZeroSalt()
+    public void DeriveKeyFromSharedSecret_NoSalt_UsesHashBlockSizedZeroSalt()
     {
         // Arrange
-        var logger = _fakeLogger;
-        var twoStepKdf = new Sp80056CTwoStepKdf(_mockKeyAgreement.Object, logger);
+        var twoStepKdf = new Sp80056CTwoStepKdf(_mockKeyAgreement.Object);
         var sharedSecret = new byte[32];
         _random.NextBytes(sharedSecret);
 
@@ -182,14 +181,17 @@ public class Sp80056CTwoStepKdfTests
             .Build();
 
         // Act
-        var result = twoStepKdf.DeriveKeyFromSharedSecret(sharedSecret, options);
+        var defaultSaltResult = twoStepKdf.DeriveKeyFromSharedSecret(sharedSecret, options);
+        var explicitSaltOptions = Sp80056COptions.CreateBuilder()
+            .WithLabel("TestLabel")
+            .WithOutputLengthInBytes(32)
+            .WithSalt(new byte[64])
+            .UseTwoStepKdf(PrfType.HmacSha256, PrfType.HmacSha256)
+            .Build();
+        var explicitSaltResult = twoStepKdf.DeriveKeyFromSharedSecret(sharedSecret, explicitSaltOptions);
 
         // Assert
-        result.Should().NotBeNull();
-        var logs = _fakeLogger.Collector.GetSnapshot();
-        logs.Should().Contain(log => 
-            log.Level == LogLevel.Debug && 
-            log.Message.Contains("No salt provided, using zero salt"));
+        defaultSaltResult.Should().Equal(explicitSaltResult);
     }
 
     [Test]
@@ -220,7 +222,7 @@ public class Sp80056CTwoStepKdfTests
     [TestCase(PrfType.HmacSha256, PrfType.HmacSha384)]
     [TestCase(PrfType.HmacSha384, PrfType.HmacSha512)]
     [TestCase(PrfType.HmacSha512, PrfType.HmacSha256)]
-    public void DeriveKeyFromSharedSecret_DifferentPrfCombinations_ProducesDifferentKeys(
+    public void DeriveKeyFromSharedSecret_ForbiddenPrfCombination_IsRejected(
         PrfType extractPrf, PrfType expandPrf)
     {
         // Arrange
@@ -234,12 +236,9 @@ public class Sp80056CTwoStepKdfTests
             .UseTwoStepKdf(extractPrf, expandPrf)
             .Build();
 
-        // Act
-        var result = twoStepKdf.DeriveKeyFromSharedSecret(sharedSecret, options);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Length.Should().Be(32);
+        // Act and assert
+        var act = () => twoStepKdf.DeriveKeyFromSharedSecret(sharedSecret, options);
+        act.Should().Throw<ArgumentException>().WithMessage("*not permitted*");
     }
 
     [Test]
@@ -303,9 +302,9 @@ public class Sp80056CTwoStepKdfTests
         logs.Should().Contain(log => 
             log.Level == LogLevel.Debug && 
             log.Message.Contains("Starting two-step key derivation"));
-        logs.Should().Contain(log => 
-            log.Level == LogLevel.Debug && 
-            log.Message.Contains("Extraction completed"));
+        logs.Should().Contain(log =>
+            log.Level == LogLevel.Debug &&
+            log.Message.Contains("Extract with HmacSha256, Expand with HmacSha256"));
         logs.Should().Contain(log => 
             log.Level == LogLevel.Information && 
             log.Message.Contains("Successfully derived key"));

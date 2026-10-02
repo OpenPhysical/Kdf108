@@ -43,6 +43,12 @@ public static class PrfFactory
             [PrfType.HmacSha256] = static () => new HmacPrf(static () => new Sha256Digest()),
             [PrfType.HmacSha384] = static () => new HmacPrf(static () => new Sha384Digest()),
             [PrfType.HmacSha512] = static () => new HmacPrf(static () => new Sha512Digest()),
+            [PrfType.HmacSha512_224] = static () => new HmacPrf(static () => new Sha512tDigest(224)),
+            [PrfType.HmacSha512_256] = static () => new HmacPrf(static () => new Sha512tDigest(256)),
+            [PrfType.HmacSha3_224] = static () => new HmacPrf(static () => new Sha3Digest(224)),
+            [PrfType.HmacSha3_256] = static () => new HmacPrf(static () => new Sha3Digest(256)),
+            [PrfType.HmacSha3_384] = static () => new HmacPrf(static () => new Sha3Digest(384)),
+            [PrfType.HmacSha3_512] = static () => new HmacPrf(static () => new Sha3Digest(512)),
 
             // CMAC PRFs
             [PrfType.CmacAes128] = static () => new CmacPrf(static () => new AesEngine(), 128, 16),

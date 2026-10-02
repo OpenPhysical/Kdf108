@@ -9,7 +9,7 @@ namespace Kdf108.Domain.Sp80056C;
 /// <summary>
 /// Configuration options for SP 800-56C key derivation pipelines.
 /// </summary>
-public class Sp80056COptions
+internal class Sp80056COptions
 {
     /// <summary>
     /// Gets or sets the label for the key derivation.
@@ -76,7 +76,7 @@ public class Sp80056COptions
 /// <summary>
 /// Builder for constructing Sp80056COptions with a fluent interface.
 /// </summary>
-public class Sp80056COptionsBuilder
+internal class Sp80056COptionsBuilder
 {
     private readonly Sp80056COptions _options = new();
 

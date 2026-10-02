@@ -54,6 +54,24 @@ public enum PrfType
     /// </remarks>
     HmacSha512,
 
+    /// <summary>HMAC using SHA-512/224.</summary>
+    HmacSha512_224,
+
+    /// <summary>HMAC using SHA-512/256.</summary>
+    HmacSha512_256,
+
+    /// <summary>HMAC using SHA3-224.</summary>
+    HmacSha3_224,
+
+    /// <summary>HMAC using SHA3-256.</summary>
+    HmacSha3_256,
+
+    /// <summary>HMAC using SHA3-384.</summary>
+    HmacSha3_384,
+
+    /// <summary>HMAC using SHA3-512.</summary>
+    HmacSha3_512,
+
     // CMAC PRFs
     /// <summary>
     /// Specifies the CMAC-AES-128 (Cipher-based Message Authentication Code with 128-bit AES)
@@ -102,4 +120,3 @@ public enum PrfType
     /// </remarks>
     CmacTdes2
 }
-

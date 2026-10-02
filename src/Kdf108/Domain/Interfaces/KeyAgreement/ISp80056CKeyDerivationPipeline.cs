@@ -10,7 +10,7 @@ namespace Kdf108.Domain.Interfaces.KeyAgreement;
 /// Interface for key derivation pipelines as defined in NIST SP 800-56C.
 /// Combines key agreement (SP 800-56A) with key derivation (SP 800-108).
 /// </summary>
-public interface ISp80056CKeyDerivationPipeline
+internal interface ISp80056CKeyDerivationPipeline
 {
     /// <summary>
     /// Performs key agreement and derives keys using the complete pipeline.

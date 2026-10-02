@@ -13,7 +13,7 @@ namespace Kdf108.Domain.Validator;
 /// Validator for SP 800-56C pipeline options.
 /// Ensures the options meet all requirements for secure key derivation.
 /// </summary>
-public class Sp80056COptionsValidator : AbstractValidator<Sp80056COptions>
+internal class Sp80056COptionsValidator : AbstractValidator<Sp80056COptions>
 {
     private readonly ILogger<Sp80056COptionsValidator> _logger;
 

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
+using System.IO;
+using System.Security.Cryptography;
 using Kdf108.Domain.Interfaces.KeyAgreement;
 using Kdf108.Domain.Kdf;
 using Kdf108.Domain.Sp80056A;
-using Kdf108.Infrastructure.Prf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,7 +16,7 @@ namespace Kdf108.Domain.Sp80056C;
 /// Implements the two-step key derivation method as defined in NIST SP 800-56C.
 /// This method uses an extraction step followed by an expansion step (similar to HKDF).
 /// </summary>
-public class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
+internal class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
 {
     private readonly ILogger<Sp80056CTwoStepKdf> _logger;
     private readonly ISp80056AKeyAgreement _keyAgreement;
@@ -59,7 +60,14 @@ public class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
             _logger.LogDebug("Key agreement completed, shared secret size: {Size} bytes", sharedSecret.Length);
 
             // Derive key from shared secret
-            return DeriveKeyFromSharedSecret(sharedSecret, options);
+            try
+            {
+                return DeriveKeyFromSharedSecret(sharedSecret, options);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(sharedSecret);
+            }
         }
         catch (Exception ex)
         {
@@ -79,17 +87,30 @@ public class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
 
         try
         {
-            // Step 1: Extract - derive a key-derivation key from the shared secret
-            var extractedKey = PerformExtraction(sharedSecret, options);
-            _logger.LogDebug("Extraction completed, extracted key size: {Size} bytes", extractedKey.Length);
-
-            // Step 2: Expand - use the extracted key to derive the final key material
-            var expandedKey = PerformExpansion(extractedKey, options);
+            var extraction = CreateExtraction(options.ExtractionPrfType, options.Salt);
+            EnsurePermittedExpansion(options.ExtractionPrfType, options.ExpansionPrfType);
+            var fixedInfo = options.OtherInfo ?? CreateLegacyFixedInfo(
+                options.Label,
+                options.Context,
+                options.OutputLengthInBits);
+            var outputLength = BitLength.Create(options.OutputLengthInBits);
+            KeyExpansion expansion = options.KdfMode switch
+            {
+                KdfMode.Counter => KeyExpansion.CounterMode(fixedInfo, outputLength, options.CounterLengthBits, options.CounterLocation),
+                KdfMode.Feedback => KeyExpansion.FeedbackMode(fixedInfo, Array.Empty<byte>(), outputLength, false, options.CounterLengthBits, options.CounterLocation),
+                KdfMode.FeedbackWithCounter => KeyExpansion.FeedbackMode(fixedInfo, Array.Empty<byte>(), outputLength, true, options.CounterLengthBits, options.CounterLocation),
+                KdfMode.DoublePipeline => KeyExpansion.DoublePipelineMode(fixedInfo, outputLength, false, options.CounterLengthBits, options.CounterLocation),
+                KdfMode.DoublePipelineWithCounter => KeyExpansion.DoublePipelineMode(fixedInfo, outputLength, true, options.CounterLengthBits, options.CounterLocation),
+                _ => throw new ArgumentOutOfRangeException(nameof(options.KdfMode))
+            };
+            var request = new TwoStepKdfRequest(
+                sharedSecret,
+                extraction,
+                SecurityStrength.Bits112,
+                new[] { expansion });
+            var expandedKey = Sp80056CTwoStep.Derive(request)[0];
             _logger.LogInformation("Successfully derived key using two-step KDF, output length: {Length} bits", 
                 options.OutputLengthInBits);
-
-            // Clear sensitive material
-            Array.Clear(extractedKey, 0, extractedKey.Length);
 
             return expandedKey;
         }
@@ -100,60 +121,50 @@ public class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
         }
     }
 
+    private static TwoStepExtraction CreateExtraction(PrfType type, byte[]? salt) => type switch
+    {
+        PrfType.HmacSha1 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha1, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha224 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha224, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha256 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha256, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha384 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha384, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha512 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha512, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha512_224 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha512_224, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha512_256 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha512_256, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha3_224 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha3_224, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha3_256 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha3_256, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha3_384 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha3_384, salt ?? Array.Empty<byte>()),
+        PrfType.HmacSha3_512 => TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha3_512, salt ?? Array.Empty<byte>()),
+        PrfType.CmacAes128 => TwoStepExtraction.AesCmacFunction(128, salt ?? Array.Empty<byte>()),
+        PrfType.CmacAes192 => TwoStepExtraction.AesCmacFunction(192, salt ?? Array.Empty<byte>()),
+        PrfType.CmacAes256 => TwoStepExtraction.AesCmacFunction(256, salt ?? Array.Empty<byte>()),
+        _ => throw new ArgumentException("SP 800-56C two-step extraction requires HMAC or AES-CMAC.", nameof(type))
+    };
+
+    private static void EnsurePermittedExpansion(PrfType extraction, PrfType expansion)
+    {
+        bool permitted = extraction switch
+        {
+            PrfType.CmacAes128 or PrfType.CmacAes192 or PrfType.CmacAes256 => expansion == PrfType.CmacAes128,
+            _ => extraction == expansion
+        };
+        if (!permitted)
+            throw new ArgumentException("The expansion PRF is not permitted for the selected extraction MAC.", nameof(expansion));
+    }
+
+    private static byte[] CreateLegacyFixedInfo(string label, byte[] context, long outputLengthBits)
+    {
+        using var stream = new MemoryStream();
+        stream.Write(KdfLabel.FromString(label).ToArray());
+        stream.WriteByte(0);
+        stream.Write(context);
+        stream.WriteByte((byte)(outputLengthBits >> 24));
+        stream.WriteByte((byte)(outputLengthBits >> 16));
+        stream.WriteByte((byte)(outputLengthBits >> 8));
+        stream.WriteByte((byte)outputLengthBits);
+        return stream.ToArray();
+    }
+
     /// <inheritdoc/>
     public string PipelineName => $"SP800-56C-TwoStep-{_keyAgreement.SchemeName}";
 
-    /// <summary>
-    /// Performs the extraction step of the two-step KDF.
-    /// </summary>
-    /// <param name="sharedSecret">The shared secret from key agreement.</param>
-    /// <param name="options">Pipeline configuration options.</param>
-    /// <returns>The extracted key material.</returns>
-    private byte[] PerformExtraction(byte[] sharedSecret, Sp80056COptions options)
-    {
-        var extractionPrf = PrfFactory.Create(options.ExtractionPrfType);
-        
-        // Use salt if provided, otherwise use a zero key of PRF output size
-        var salt = options.Salt;
-        if (salt == null || salt.Length == 0)
-        {
-            salt = new byte[extractionPrf.OutputSizeBits / 8];
-            _logger.LogDebug("No salt provided, using zero salt of {Size} bytes", salt.Length);
-        }
-
-        // The extraction step uses the salt as the key and shared secret as the message
-        var extractedKey = extractionPrf.Compute(salt, sharedSecret);
-        
-        return extractedKey;
-    }
-
-    /// <summary>
-    /// Performs the expansion step of the two-step KDF.
-    /// </summary>
-    /// <param name="extractedKey">The key material from the extraction step.</param>
-    /// <param name="options">Pipeline configuration options.</param>
-    /// <returns>The expanded key material.</returns>
-    private byte[] PerformExpansion(byte[] extractedKey, Sp80056COptions options)
-    {
-        // Build KDF options for expansion
-        var kdfOptions = KdfOptions.CreateBuilder()
-            .WithPrfType(options.ExpansionPrfType)
-            .WithCounterLengthBits(options.CounterLengthBits)
-            .WithUseCounter(true)
-            .WithCounterLocation(options.CounterLocation)
-            .Build();
-
-        // If OtherInfo is provided, use it as context
-        var context = options.OtherInfo ?? options.Context;
-
-        // Perform key expansion using SP 800-108
-        var kdfEngine = new KdfEngine();
-        return kdfEngine.Derive(
-            options.KdfMode,
-            extractedKey,
-            options.Label,
-            context,
-            options.OutputLengthInBits,
-            kdfOptions);
-    }
 }

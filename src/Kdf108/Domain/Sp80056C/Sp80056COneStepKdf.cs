@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
+using System.IO;
+using System.Security.Cryptography;
 using Kdf108.Domain.Interfaces.KeyAgreement;
 using Kdf108.Domain.Kdf;
 using Kdf108.Domain.Sp80056A;
@@ -14,7 +16,7 @@ namespace Kdf108.Domain.Sp80056C;
 /// Implements the one-step key derivation method as defined in NIST SP 800-56C.
 /// This method directly applies an approved KDF to the shared secret.
 /// </summary>
-public class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
+internal class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
 {
     private readonly ILogger<Sp80056COneStepKdf> _logger;
     private readonly ISp80056AKeyAgreement _keyAgreement;
@@ -58,7 +60,14 @@ public class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
             _logger.LogDebug("Key agreement completed, shared secret size: {Size} bytes", sharedSecret.Length);
 
             // Derive key from shared secret
-            return DeriveKeyFromSharedSecret(sharedSecret, options);
+            try
+            {
+                return DeriveKeyFromSharedSecret(sharedSecret, options);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(sharedSecret);
+            }
         }
         catch (Exception ex)
         {
@@ -77,49 +86,23 @@ public class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
 
         try
         {
-            // Build KDF options
-            var kdfOptions = KdfOptions.CreateBuilder()
-                .WithPrfType(options.ExpansionPrfType)
-                .WithCounterLengthBits(options.CounterLengthBits)
-                .WithUseCounter(true)
-                .WithCounterLocation(options.CounterLocation)
-                .Build();
-
-            // Combine shared secret with salt if provided
-            byte[] kdk;
-            if (options.Salt != null && options.Salt.Length > 0)
-            {
-                kdk = new byte[sharedSecret.Length + options.Salt.Length];
-                Buffer.BlockCopy(sharedSecret, 0, kdk, 0, sharedSecret.Length);
-                Buffer.BlockCopy(options.Salt, 0, kdk, sharedSecret.Length, options.Salt.Length);
-                _logger.LogDebug("Combined shared secret with salt, KDK size: {Size} bytes", kdk.Length);
-            }
-            else
-            {
-                kdk = sharedSecret;
-            }
-
-            // If OtherInfo is provided, use it as context
-            var context = options.OtherInfo ?? options.Context;
-
-            // Perform key derivation using SP 800-108
-            var kdfEngine = new KdfEngine();
-            var derivedKey = kdfEngine.Derive(
-                options.KdfMode,
-                kdk,
+            var fixedInfo = options.OtherInfo ?? CreateLegacyFixedInfo(
                 options.Label,
-                context,
-                options.OutputLengthInBits,
-                kdfOptions);
+                options.Context,
+                options.OutputLengthInBits);
+            var auxiliary = OneStepAuxiliaryFunction.HmacFunction(
+                ToHashAlgorithm(options.ExpansionPrfType),
+                options.Salt ?? Array.Empty<byte>());
+            var request = new OneStepKdfRequest(
+                sharedSecret,
+                fixedInfo,
+                BitLength.Create(options.OutputLengthInBits),
+                SecurityStrength.Bits112,
+                auxiliary);
+            var derivedKey = Sp80056COneStep.Derive(request);
 
             _logger.LogInformation("Successfully derived key using one-step KDF, output length: {Length} bits", 
                 options.OutputLengthInBits);
-
-            // Clear sensitive material
-            if (kdk != sharedSecret)
-            {
-                Array.Clear(kdk, 0, kdk.Length);
-            }
 
             return derivedKey;
         }
@@ -132,4 +115,33 @@ public class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
 
     /// <inheritdoc/>
     public string PipelineName => $"SP800-56C-OneStep-{_keyAgreement.SchemeName}";
+
+    private static NistHashAlgorithm ToHashAlgorithm(PrfType prfType) => prfType switch
+    {
+        PrfType.HmacSha1 => NistHashAlgorithm.Sha1,
+        PrfType.HmacSha224 => NistHashAlgorithm.Sha224,
+        PrfType.HmacSha256 => NistHashAlgorithm.Sha256,
+        PrfType.HmacSha384 => NistHashAlgorithm.Sha384,
+        PrfType.HmacSha512 => NistHashAlgorithm.Sha512,
+        PrfType.HmacSha512_224 => NistHashAlgorithm.Sha512_224,
+        PrfType.HmacSha512_256 => NistHashAlgorithm.Sha512_256,
+        PrfType.HmacSha3_224 => NistHashAlgorithm.Sha3_224,
+        PrfType.HmacSha3_256 => NistHashAlgorithm.Sha3_256,
+        PrfType.HmacSha3_384 => NistHashAlgorithm.Sha3_384,
+        PrfType.HmacSha3_512 => NistHashAlgorithm.Sha3_512,
+        _ => throw new ArgumentException("One-step SP 800-56C requires a hash, HMAC, or KMAC auxiliary function.", nameof(prfType))
+    };
+
+    private static byte[] CreateLegacyFixedInfo(string label, byte[] context, long outputLengthBits)
+    {
+        using var stream = new MemoryStream();
+        stream.Write(KdfLabel.FromString(label).ToArray());
+        stream.WriteByte(0);
+        stream.Write(context);
+        stream.WriteByte((byte)(outputLengthBits >> 24));
+        stream.WriteByte((byte)(outputLengthBits >> 16));
+        stream.WriteByte((byte)(outputLengthBits >> 8));
+        stream.WriteByte((byte)outputLengthBits);
+        return stream.ToArray();
+    }
 }
