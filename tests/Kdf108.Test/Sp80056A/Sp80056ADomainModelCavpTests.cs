@@ -46,11 +46,8 @@ public class Sp80056ADomainModelCavpTests
             "Test of 800-56A excluding KDF", "ECC Ephemeral Unified Scheme",
             "KASValidityTest_ECCEphemeralUnified_NOKC_ZZOnly_init.fax");
 
-        if (!File.Exists(testVectorPath))
-        {
-            Assert.Ignore($"Test vector file not found: {testVectorPath}");
-            return;
-        }
+        Assert.That(File.Exists(testVectorPath), Is.True,
+            $"Required test vector file not found: {testVectorPath}");
 
         var testVectors = CavpTestVectorParser.ParseFile(testVectorPath);
 
@@ -85,7 +82,7 @@ public class Sp80056ADomainModelCavpTests
                 out iutEphemeralKeyPair, out keyPairException))
             {
                 // If we have an exception and the test should fail, check it now
-                if (keyPairException != null && vector.Result == "F")
+                if (keyPairException != null && ExpectsRejection(vector))
                 {
                     ValidateExpectedException(keyPairException, vector.ErrorCode);
                     return; // Test passed - got expected exception
@@ -96,7 +93,7 @@ public class Sp80056ADomainModelCavpTests
                     vector.QeIUTx != null && vector.QeIUTy != null)
                 {
                     var privateKey = new EcPrivateKey(vector.DeIUT, curveName, _privateKeyLogger);
-                    var publicKeyBytes = CreateUncompressedPublicKey(vector.QeIUTx, vector.QeIUTy);
+                    var publicKeyBytes = CreateUncompressedPublicKey(vector.QeIUTx, vector.QeIUTy, curveName);
                     var publicKey = new EcPublicKey(publicKeyBytes, curveName, _publicKeyLogger);
                     
                     // This will throw KeyMismatchException if keys don't match
@@ -110,7 +107,7 @@ public class Sp80056ADomainModelCavpTests
                 Assert.Fail($"Missing CAVS ephemeral public key for vector {vector.Count}");
                 return;
             }
-            var cavsPublicKeyBytes = CreateUncompressedPublicKey(vector.QeCAVSx, vector.QeCAVSy);
+            var cavsPublicKeyBytes = CreateUncompressedPublicKey(vector.QeCAVSx, vector.QeCAVSy, curveName);
             var cavsPublicKey = new EcPublicKey(cavsPublicKeyBytes, curveName, _publicKeyLogger);
 
             // Compute shared secret using the clean API
@@ -134,19 +131,9 @@ public class Sp80056ADomainModelCavpTests
                 return;
             }
 
-            // Verify result
-            if (vector.Result == "P")
-            {
-                // Should pass - verify shared secret matches
-                sharedSecret.ToArray().Should().BeEquivalentTo(vector.Z);
-            }
-            else
-            {
-                // Should have failed but didn't
-                Assert.Fail($"Vector {vector.Count} should have failed but succeeded");
-            }
+            VerifySharedSecret(vector, sharedSecret);
         }
-        catch (Exception ex) when (vector.Result == "F")
+        catch (Exception ex) when (ExpectsRejection(vector) && ex is not AssertionException)
         {
             // Expected failure - check the type of exception based on error code
             ValidateExpectedException(ex, vector.ErrorCode);
@@ -164,14 +151,11 @@ public class Sp80056ADomainModelCavpTests
     public void StaticUnified_ZZOnly_Tests()
     {
         var testVectorPath = GetTestVectorPath(
-            "Test of 800-56A excluding KDF", "ECC StaticUnified Scheme",
+            "Test of 800-56A excluding KDF", "ECC Static Unified Scheme",
             "KASValidityTest_ECCStaticUnified_NOKC_ZZOnly_init.fax");
 
-        if (!File.Exists(testVectorPath))
-        {
-            Assert.Ignore($"Test vector file not found: {testVectorPath}");
-            return;
-        }
+        Assert.That(File.Exists(testVectorPath), Is.True,
+            $"Required test vector file not found: {testVectorPath}");
 
         var testVectors = CavpTestVectorParser.ParseFile(testVectorPath);
 
@@ -204,7 +188,7 @@ public class Sp80056ADomainModelCavpTests
                 out iutStaticKeyPair, out keyPairException))
             {
                 // If we have an exception and the test should fail, check it now
-                if (keyPairException != null && vector.Result == "F")
+                if (keyPairException != null && ExpectsRejection(vector))
                 {
                     ValidateExpectedException(keyPairException, vector.ErrorCode);
                     return; // Test passed - got expected exception
@@ -215,7 +199,7 @@ public class Sp80056ADomainModelCavpTests
                     vector.QsIUTx != null && vector.QsIUTy != null)
                 {
                     var privateKey = new EcPrivateKey(vector.DsIUT, curveName, _privateKeyLogger);
-                    var publicKeyBytes = CreateUncompressedPublicKey(vector.QsIUTx, vector.QsIUTy);
+                    var publicKeyBytes = CreateUncompressedPublicKey(vector.QsIUTx, vector.QsIUTy, curveName);
                     var publicKey = new EcPublicKey(publicKeyBytes, curveName, _publicKeyLogger);
                     
                     // KeyMismatchException thrown here if they don't match
@@ -229,7 +213,7 @@ public class Sp80056ADomainModelCavpTests
                 Assert.Fail($"Missing CAVS static public key for vector {vector.Count}");
                 return;
             }
-            var cavsPublicKeyBytes = CreateUncompressedPublicKey(vector.QsCAVSx, vector.QsCAVSy);
+            var cavsPublicKeyBytes = CreateUncompressedPublicKey(vector.QsCAVSx, vector.QsCAVSy, curveName);
             var cavsPublicKey = new EcPublicKey(cavsPublicKeyBytes, curveName, _publicKeyLogger);
 
             // Compute shared secret
@@ -251,17 +235,9 @@ public class Sp80056ADomainModelCavpTests
                 return;
             }
 
-            // Verify result
-            if (vector.Result == "P")
-            {
-                sharedSecret.ToArray().Should().BeEquivalentTo(vector.Z);
-            }
-            else
-            {
-                Assert.Fail($"Vector {vector.Count} should have failed but succeeded");
-            }
+            VerifySharedSecret(vector, sharedSecret);
         }
-        catch (Exception ex) when (vector.Result == "F")
+        catch (Exception ex) when (ExpectsRejection(vector) && ex is not AssertionException)
         {
             ValidateExpectedException(ex, vector.ErrorCode);
         }
@@ -277,14 +253,11 @@ public class Sp80056ADomainModelCavpTests
     public void FullUnified_ZZOnly_Tests()
     {
         var testVectorPath = GetTestVectorPath(
-            "Test of 800-56A excluding KDF", "ECC FullUnified Scheme",
+            "Test of 800-56A excluding KDF", "ECC Full Unified Scheme",
             "KASValidityTest_ECCFullUnified_NOKC_ZZOnly_init.fax");
 
-        if (!File.Exists(testVectorPath))
-        {
-            Assert.Ignore($"Test vector file not found: {testVectorPath}");
-            return;
-        }
+        Assert.That(File.Exists(testVectorPath), Is.True,
+            $"Required test vector file not found: {testVectorPath}");
 
         var testVectors = CavpTestVectorParser.ParseFile(testVectorPath);
 
@@ -314,7 +287,7 @@ public class Sp80056ADomainModelCavpTests
             if (vector.DsIUT != null && vector.QsIUTx != null && vector.QsIUTy != null)
             {
                 var privateKey = new EcPrivateKey(vector.DsIUT, curveName, _privateKeyLogger);
-                var publicKeyBytes = CreateUncompressedPublicKey(vector.QsIUTx, vector.QsIUTy);
+                var publicKeyBytes = CreateUncompressedPublicKey(vector.QsIUTx, vector.QsIUTy, curveName);
                 var publicKey = new EcPublicKey(publicKeyBytes, curveName, _publicKeyLogger);
                 iutStaticKeyPair = EcKeyPair.Create(privateKey, publicKey, _keyPairLogger);
             }
@@ -323,7 +296,7 @@ public class Sp80056ADomainModelCavpTests
             if (vector.DeIUT != null && vector.QeIUTx != null && vector.QeIUTy != null)
             {
                 var privateKey = new EcPrivateKey(vector.DeIUT, curveName, _privateKeyLogger);
-                var publicKeyBytes = CreateUncompressedPublicKey(vector.QeIUTx, vector.QeIUTy);
+                var publicKeyBytes = CreateUncompressedPublicKey(vector.QeIUTx, vector.QeIUTy, curveName);
                 var publicKey = new EcPublicKey(publicKeyBytes, curveName, _publicKeyLogger);
                 iutEphemeralKeyPair = EcKeyPair.Create(privateKey, publicKey, _keyPairLogger);
             }
@@ -336,10 +309,10 @@ public class Sp80056ADomainModelCavpTests
                 return;
             }
             var cavsStaticPublicKey = new EcPublicKey(
-                CreateUncompressedPublicKey(vector.QsCAVSx, vector.QsCAVSy), 
+                CreateUncompressedPublicKey(vector.QsCAVSx, vector.QsCAVSy, curveName), 
                 curveName, _publicKeyLogger);
             var cavsEphemeralPublicKey = new EcPublicKey(
-                CreateUncompressedPublicKey(vector.QeCAVSx, vector.QeCAVSy), 
+                CreateUncompressedPublicKey(vector.QeCAVSx, vector.QeCAVSy, curveName), 
                 curveName, _publicKeyLogger);
 
             // For Full Unified, we need both keypairs
@@ -361,17 +334,9 @@ public class Sp80056ADomainModelCavpTests
                 iutStaticKeyPair, iutEphemeralKeyPair,
                 cavsStaticPublicKey, cavsEphemeralPublicKey);
 
-            // Verify result
-            if (vector.Result == "P")
-            {
-                sharedSecret.ToArray().Should().BeEquivalentTo(vector.Z);
-            }
-            else
-            {
-                Assert.Fail($"Vector {vector.Count} should have failed but succeeded");
-            }
+            VerifySharedSecret(vector, sharedSecret);
         }
-        catch (Exception ex) when (vector.Result == "F")
+        catch (Exception ex) when (ExpectsRejection(vector) && ex is not AssertionException)
         {
             ValidateExpectedException(ex, vector.ErrorCode);
         }
@@ -379,6 +344,28 @@ public class Sp80056ADomainModelCavpTests
         {
             throw;
         }
+    }
+
+    private static bool ExpectsRejection(CavpTestVector vector) =>
+        vector.ExpectFail && vector.ErrorCode != "8";
+
+    private static void VerifySharedSecret(CavpTestVector vector, SharedSecret sharedSecret)
+    {
+        if (vector.ExpectPass)
+        {
+            sharedSecret.ToArray().Should().BeEquivalentTo(vector.Z);
+            return;
+        }
+
+        if (vector.ErrorCode == "8")
+        {
+            // CAVP error 8 changes only the supplied Z. The inputs remain valid,
+            // so the implementation must compute Z and detect the mismatch.
+            sharedSecret.ToArray().Should().NotBeEquivalentTo(vector.Z);
+            return;
+        }
+
+        Assert.Fail($"Vector {vector.Count} should have rejected invalid input but succeeded");
     }
 
     /// <summary>
@@ -403,8 +390,8 @@ public class Sp80056ADomainModelCavpTests
                 break;
                 
             default:
-                // Any cryptographic exception is acceptable for other error codes
-                ex.Should().BeAssignableTo<CryptographicException>();
+                ex.Should().Match<Exception>(e =>
+                    e is CryptographicException || e is Sp80056AKeyAgreementException);
                 break;
         }
     }
@@ -412,8 +399,13 @@ public class Sp80056ADomainModelCavpTests
     /// <summary>
     /// Creates an uncompressed public key from X and Y coordinates.
     /// </summary>
-    private static byte[] CreateUncompressedPublicKey(byte[] x, byte[] y)
+    private static byte[] CreateUncompressedPublicKey(byte[] x, byte[] y, string curveName)
     {
+        var parameters = CurveRegistry.GetParameters(curveName)
+            ?? throw new ArgumentException($"Unsupported curve: {curveName}", nameof(curveName));
+        int coordinateLength = (parameters.Curve.FieldSize + 7) / 8;
+        x = NormalizeCoordinate(x, coordinateLength);
+        y = NormalizeCoordinate(y, coordinateLength);
         var result = new byte[1 + x.Length + y.Length];
         result[0] = 0x04; // Uncompressed format
         Array.Copy(x, 0, result, 1, x.Length);
@@ -421,13 +413,32 @@ public class Sp80056ADomainModelCavpTests
         return result;
     }
 
+    private static byte[] NormalizeCoordinate(byte[] coordinate, int length)
+    {
+        if (coordinate.Length == length) return coordinate;
+        if (coordinate.Length > length)
+        {
+            int excess = coordinate.Length - length;
+            if (coordinate.AsSpan(0, excess).IndexOfAnyExcept((byte)0) >= 0) return coordinate;
+            return coordinate.AsSpan(excess).ToArray();
+        }
+
+        var padded = new byte[length];
+        coordinate.CopyTo(padded, length - coordinate.Length);
+        return padded;
+    }
+
     /// <summary>
     /// Gets the test vector file path.
     /// </summary>
     private static string GetTestVectorPath(string category, string scheme, string fileName)
     {
-        var baseDir = TestContext.CurrentContext.TestDirectory;
-        return Path.Combine(baseDir, "res", "vectors", "SP800-56A", category, scheme, fileName);
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory is not null && !directory.GetFiles("Kdf108.Test.csproj").Any())
+            directory = directory.Parent;
+        if (directory is null) throw new DirectoryNotFoundException("Could not locate the test project.");
+        return Path.Combine(directory.FullName, "res", "vectors", "SP800-56A", "KASTestVectorsECC2016",
+            category, scheme, fileName);
     }
 
     /// <summary>

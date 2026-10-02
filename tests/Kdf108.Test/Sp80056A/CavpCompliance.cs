@@ -160,7 +160,7 @@ internal static class CavpCompliance
         
         try
         {
-            var publicKeyData = CreateUncompressedPublicKey(publicKeyX, publicKeyY);
+            var publicKeyData = CreateUncompressedPublicKey(publicKeyX, publicKeyY, curveName);
             
             // Use compliance validation for error code 7
             if (errorCode == "7")
@@ -184,12 +184,32 @@ internal static class CavpCompliance
         }
     }
     
-    private static byte[] CreateUncompressedPublicKey(byte[] x, byte[] y)
+    private static byte[] CreateUncompressedPublicKey(byte[] x, byte[] y, string curveName)
     {
+        var parameters = CurveRegistry.GetParameters(curveName)
+            ?? throw new UnsupportedCurveException($"Curve '{curveName}' is not supported");
+        int coordinateLength = (parameters.Curve.FieldSize + 7) / 8;
+        x = NormalizeCoordinate(x, coordinateLength);
+        y = NormalizeCoordinate(y, coordinateLength);
         var result = new byte[1 + x.Length + y.Length];
         result[0] = 0x04;
         Array.Copy(x, 0, result, 1, x.Length);
         Array.Copy(y, 0, result, 1 + x.Length, y.Length);
         return result;
+    }
+
+    private static byte[] NormalizeCoordinate(byte[] coordinate, int length)
+    {
+        if (coordinate.Length == length) return coordinate;
+        if (coordinate.Length > length)
+        {
+            int excess = coordinate.Length - length;
+            if (coordinate.AsSpan(0, excess).IndexOfAnyExcept((byte)0) >= 0) return coordinate;
+            return coordinate.AsSpan(excess).ToArray();
+        }
+
+        var padded = new byte[length];
+        coordinate.CopyTo(padded, length - coordinate.Length);
+        return padded;
     }
 }
