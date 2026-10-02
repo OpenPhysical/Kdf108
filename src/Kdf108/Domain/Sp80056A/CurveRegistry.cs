@@ -26,6 +26,8 @@ public static class CurveRegistry
         ["B-233"] = () => CreateFromNamedCurve("sect233r1"),
         ["K-233"] = () => CreateFromNamedCurve("sect233k1"),
         ["K-283"] = () => CreateFromNamedCurve("sect283k1"),
+        ["B-283"] = () => CreateFromNamedCurve("sect283r1"),
+        ["K-409"] = () => CreateFromNamedCurve("sect409k1"),
         ["B-409"] = () => CreateFromNamedCurve("sect409r1"),
         ["B-571"] = () => CreateFromNamedCurve("sect571r1"),
         ["K-571"] = () => CreateFromNamedCurve("sect571k1"),
