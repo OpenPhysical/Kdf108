@@ -421,9 +421,14 @@ public static class FfcKeyAgreement
         EnsureSameDomain(localDomain, remoteDomain);
         remoteDomain.ValidatePublic(publicValue);
         var z = publicValue.ModPow(privateValue, localDomain.Parameters.P);
-        if (z.Equals(BigInteger.One))
-            throw new InvalidOperationException("FFC DH produced the invalid shared secret 1.");
+        ValidateDhSharedSecret(z, localDomain.Parameters.P);
         return Format(z, localDomain.ModulusBits);
+    }
+
+    internal static void ValidateDhSharedSecret(BigInteger z, BigInteger p)
+    {
+        if (z.CompareTo(BigInteger.One) <= 0 || z.Equals(p.Subtract(BigInteger.One)))
+            throw new InvalidOperationException("FFC DH produced an invalid shared secret.");
     }
 
     private static void EnsureSameDomain(params FfcDomain[] domains)

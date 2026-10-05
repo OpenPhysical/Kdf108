@@ -83,6 +83,38 @@ public class FfcKeyAgreementTests
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(22)]
+    public void DiffieHellman_RejectsInvalidPrimitiveResults(int z)
+    {
+        Action act = () => FfcKeyAgreement.ValidateDhSharedSecret(
+            BigInteger.ValueOf(z), BigInteger.ValueOf(23));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Test]
+    public void DiffieHellman_AcceptsPrimitiveResultInsideRequiredRange()
+    {
+        Action act = () => FfcKeyAgreement.ValidateDhSharedSecret(
+            BigInteger.Two, BigInteger.ValueOf(23));
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ImportPublicKey_RejectsPMinusOneBeforeAgreement()
+    {
+        var domain = FfcDomain.Named(FfcSafePrimeGroup.Modp2048);
+        byte[] encoded = FfcKeyAgreement.Format(
+            domain.Parameters.P.Subtract(BigInteger.One), domain.ModulusBits);
+
+        Action act = () => FfcStaticPublicKey.Import(domain, encoded);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
     [Test]
     public void ImportFips186_RequiresAssuranceAndValidatesFbParameters()
     {
