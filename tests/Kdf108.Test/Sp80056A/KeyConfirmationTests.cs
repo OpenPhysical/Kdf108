@@ -147,4 +147,58 @@ public class KeyConfirmationTests
 
         act.Should().Throw<ArgumentException>().WithMessage("*target strength*");
     }
+
+    [TestCase(16)]
+    [TestCase(64)]
+    public void HmacSha256_AllowsTable5KeyLengthRangeAt112BitStrength(int keyBytes)
+    {
+        var tag = Sp80056AKeyConfirmation.GenerateTag(
+            new byte[keyBytes], CreateContext(),
+            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
+            BitLength.Create(128), SecurityStrength.Bits112);
+
+        tag.Should().HaveCount(16);
+    }
+
+    [Test]
+    public void HmacSha224_Allows256BitTargetStrength()
+    {
+        var tag = Sp80056AKeyConfirmation.GenerateTag(
+            new byte[32], CreateContext(),
+            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha224),
+            BitLength.Create(128), SecurityStrength.Bits256);
+
+        tag.Should().HaveCount(16);
+    }
+
+    [TestCase(13, 112)]
+    [TestCase(31, 256)]
+    public void Hmac_RejectsKeyBelowTargetStrength(int keyBytes, int strengthBits)
+    {
+        SecurityStrength strength = strengthBits == 112
+            ? SecurityStrength.Bits112
+            : SecurityStrength.Bits256;
+
+        var act = () => Sp80056AKeyConfirmation.GenerateTag(
+            new byte[keyBytes], CreateContext(),
+            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
+            BitLength.Create(128), strength);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*target strength*");
+    }
+
+    [Test]
+    public void Hmac_RejectsKeyLongerThan512Bits()
+    {
+        var act = () => Sp80056AKeyConfirmation.GenerateTag(
+            new byte[65], CreateContext(),
+            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
+            BitLength.Create(128), SecurityStrength.Bits112);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*at most 512 bits*");
+    }
+
+    private static KeyConfirmationContext CreateContext() => new(
+        KeyConfirmationMode.Unilateral, KeyConfirmationParty.PartyU,
+        "U"u8, "V"u8, default, default);
 }

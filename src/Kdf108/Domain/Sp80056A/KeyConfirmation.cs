@@ -214,18 +214,9 @@ public static class Sp80056AKeyConfirmation
         int keyBits = checked(key.Length * 8);
         switch (algorithm)
         {
-            case KeyConfirmationAlgorithm.Hmac { Hash: NistHashAlgorithm.Sha1 }:
-                if (strength.Bits > 160)
-                    throw new ArgumentException("HMAC-SHA-1 cannot support the requested security strength.", nameof(strength));
+            case KeyConfirmationAlgorithm.Hmac:
                 if (keyBits < strength.Bits || keyBits > 512)
-                    throw new ArgumentException("Invalid HMAC-SHA-1 key length.", nameof(key));
-                break;
-            case KeyConfirmationAlgorithm.Hmac hmac:
-                int hashBits = Sp80056CAlgorithmInfo.OutputBits(hmac.Hash);
-                if (strength.Bits > hashBits)
-                    throw new ArgumentException("HMAC cannot support the requested security strength.", nameof(strength));
-                if (keyBits != hashBits)
-                    throw new ArgumentException("HMAC key length must equal the selected hash output length.", nameof(key));
+                    throw new ArgumentException("HMAC key length must support the target strength and be at most 512 bits.", nameof(key));
                 break;
             case KeyConfirmationAlgorithm.Kmac kmac:
                 if (strength.Bits > kmac.Strength)
