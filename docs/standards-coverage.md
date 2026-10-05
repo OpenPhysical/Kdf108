@@ -3,6 +3,20 @@
 This matrix records the implemented surface and its executable evidence. It is a maintenance
 map for this repository, not a third-party validation statement.
 
+## SP 800-108 Rev. 1
+
+- Counter, feedback, and double-pipeline modes support approved HMAC and AES-CMAC PRFs.
+- The dedicated, single-invocation KMAC KDF supports KMAC128 and KMAC256 separately from the
+  iterative modes.
+- TDEA PRFs are absent from the production API. Their 4,000 records in the pinned historical
+  corpus are counted and identified as legacy diagnostics, not executed as conforming vectors.
+- Output, counter, `[L]`, and managed-allocation bounds are checked before PRF work or allocation.
+- Temporary PRF inputs, blocks, feedback state, and double-pipeline values are zeroed.
+
+Evidence: `Sp800108KmacTests`, `OutputLimitTests`, `SecurityInvariantRegressionTests`, and the
+`CAVP-SP800-108` gate. The gate executes 16,000 approved-algorithm response vectors plus seven
+corpus/policy checks on each target framework, with zero skips permitted.
+
 ## SP 800-56C Rev. 2
 
 - One-step derivation implements hash, HMAC, KMAC128, and KMAC256 auxiliary functions.
@@ -37,11 +51,17 @@ unofficial Rev. 1 vectors and remain labelled as such.
 
 Evidence: the SP 800-56A CAVP resources, focused FFC role-symmetry tests, key-validation tests,
 and independent key-confirmation MAC tests. Vector-backed tests are mandatory only when their
-test cases are not marked `Explicit`; explicit diagnostic fixtures are not counted as a release
-gate.
+test cases carry the `CAVP-SP800-56A` category. The larger historical harness carries
+`CAVP-Diagnostic-SP800-56A`: CI executes it and records its failures, but it cannot satisfy the
+release gate until its mutation and MAC-verification gaps are repaired.
 
 ## Release gate
 
-The release workflow restores, builds with nullable analysis enabled and zero warnings, and runs
-the test suite for both `net9.0` and `net10.0`. Any skipped or explicit diagnostic fixture is
-outside that gate and must not be cited as passing evidence.
+The fast gate excludes `LongRunning` and `LegacyDiagnostic` tests so normal development remains
+responsive. Dedicated gates positively select SP 800-108 and SP 800-56A CAVP categories for both
+`net9.0` and `net10.0`, require exact execution counts, and reject skipped tests. The checked-in
+manifest records every gate's scope and reason, corpus hashes, approved-vector counts, and legacy
+classifications.
+
+Publication additionally requires an annotated GitHub-verified tag whose version exactly matches
+the package version and approval through the protected `nuget-production` environment.
