@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using AwesomeAssertions;
 using Kdf108.Domain.Sp80056A;
+using Org.BouncyCastle.Math;
 
 namespace Kdf108.Test.Sp80056A;
 
@@ -108,6 +109,60 @@ public class FfcKeyAgreementTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    [Test]
+    public void ImportFips186_ReplaysNistProbablePrimeValidationVector()
+    {
+        // NIST CAVP FIPS 186-3 DSA PQGVer. FIPS 186-4 retains this A.1.1.3
+        // validation method. L=2048, N=224, SHA-224, Result=P.
+        var p = Convert.FromHexString(
+            "B0C026CE57C43F982DECD609FBEFFA9F07B14182930D04AE3899D5C2A915363965C959DEBA558BBA852443F5009C40BCBF3A77FCCD2A4018F86D1246FCE29E89EE0D0F0441B60E2CE21CCC5D64E783705838C55CC9CC1633D6FE40C847E680D18BAB9D1B4E76555203B5690DA2114A26D65C6AC8DE5FD52C4B9FED9423DD0A3D5B7F3E01C741DF99D9C10ED314F42C4DA287A9B0A2BC2374C93F9891C720B3B092D8180DCB61CC70CB6B4425286AAD77C82EB1751207EE06275AFAE4B243442B3A0DAF1C8596539B3B1557AAC13B2CDA6BF6723D1A651EB57091BFE71501013BA9AE4DA8C5B01553457B373BD5B5102B27632F28A2D71437EE274ED3EC9578DB");
+        var q = Convert.FromHexString("A09BBC32691F44132A667220CCF5EBFA77BA15016E1F993A0CB74691");
+        var seed = Convert.FromHexString("3068DDE74863F18A3C6E5CAF244DF178C697A4B6AA087226C1ABE4AB");
+        var pValue = new BigInteger(1, p);
+        var qValue = new BigInteger(1, q);
+        byte[] g = BigInteger.Two.ModPow(pValue.Subtract(BigInteger.One).Divide(qValue), pValue).ToByteArrayUnsigned();
+        var assurance = FfcDomainAssurance.Fips186ProbablePrimeValidation(
+            seed, 307, FfcDomainParameterHash.Sha224);
+
+        var domain = FfcDomain.ImportFips186(p, q, g, assurance);
+
+        domain.Assurance.Should().BeSameAs(assurance);
+        var evidence = domain.Assurance.Should().BeOfType<FfcDomainAssurance.GeneratedOrValidated>().Subject;
+        evidence.Hash.Should().Be(FfcDomainParameterHash.Sha224);
+        evidence.Counter.Should().Be(307);
+    }
+
+    [TestCase(306, FfcDomainParameterHash.Sha224, "counter")]
+    [TestCase(307, FfcDomainParameterHash.Sha256, "hash")]
+    public void ImportFips186_RejectsMismatchedProbablePrimeEvidence(
+        int counter,
+        FfcDomainParameterHash hash,
+        string _)
+    {
+        var (p, q, g, seed) = NistProbablePrimeVector();
+        var assurance = FfcDomainAssurance.Fips186ProbablePrimeValidation(seed, counter, hash);
+
+        Action act = () => FfcDomain.ImportFips186(p, q, g, assurance);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public void ImportFips186_RejectsMismatchedSeedAndInvalidGenerator()
+    {
+        var (p, q, g, seed) = NistProbablePrimeVector();
+        seed[0] ^= 1;
+        var assurance = FfcDomainAssurance.Fips186ProbablePrimeValidation(
+            seed, 307, FfcDomainParameterHash.Sha224);
+
+        Action badSeed = () => FfcDomain.ImportFips186(p, q, g, assurance);
+        Action badGenerator = () => FfcDomain.ImportFips186(
+            p, q, new byte[] { 1 }, FfcDomainAssurance.TrustedAuthority("NIST CAVP"));
+
+        badSeed.Should().Throw<ArgumentException>().WithMessage("*seed*hash*q*");
+        badGenerator.Should().Throw<ArgumentException>().WithMessage("*subgroup*");
+    }
+
     [TestCase("B-283")]
     [TestCase("K-409")]
     public void CurveRegistry_ContainsRemainingRev3BinaryCurves(string name)
@@ -130,5 +185,16 @@ public class FfcKeyAgreementTests
         string prefix = name + " = ";
         string value = File.ReadLines(path).First(line => line.StartsWith(prefix, StringComparison.Ordinal))[prefix.Length..];
         return Convert.FromHexString(value);
+    }
+
+    private static (byte[] P, byte[] Q, byte[] G, byte[] Seed) NistProbablePrimeVector()
+    {
+        byte[] p = Convert.FromHexString(
+            "B0C026CE57C43F982DECD609FBEFFA9F07B14182930D04AE3899D5C2A915363965C959DEBA558BBA852443F5009C40BCBF3A77FCCD2A4018F86D1246FCE29E89EE0D0F0441B60E2CE21CCC5D64E783705838C55CC9CC1633D6FE40C847E680D18BAB9D1B4E76555203B5690DA2114A26D65C6AC8DE5FD52C4B9FED9423DD0A3D5B7F3E01C741DF99D9C10ED314F42C4DA287A9B0A2BC2374C93F9891C720B3B092D8180DCB61CC70CB6B4425286AAD77C82EB1751207EE06275AFAE4B243442B3A0DAF1C8596539B3B1557AAC13B2CDA6BF6723D1A651EB57091BFE71501013BA9AE4DA8C5B01553457B373BD5B5102B27632F28A2D71437EE274ED3EC9578DB");
+        byte[] q = Convert.FromHexString("A09BBC32691F44132A667220CCF5EBFA77BA15016E1F993A0CB74691");
+        var pValue = new BigInteger(1, p);
+        var qValue = new BigInteger(1, q);
+        byte[] g = BigInteger.Two.ModPow(pValue.Subtract(BigInteger.One).Divide(qValue), pValue).ToByteArrayUnsigned();
+        return (p, q, g, Convert.FromHexString("3068DDE74863F18A3C6E5CAF244DF178C697A4B6AA087226C1ABE4AB"));
     }
 }

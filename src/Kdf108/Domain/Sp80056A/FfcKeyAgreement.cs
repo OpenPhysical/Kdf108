@@ -5,7 +5,9 @@
 
 using System;
 using System.Collections.Generic;
+using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Agreement;
+using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
@@ -28,6 +30,15 @@ public enum FfcSafePrimeGroup
     Ffdhe8192
 }
 
+/// <summary>An approved hash function used to generate FIPS 186 probable primes.</summary>
+public enum FfcDomainParameterHash
+{
+    Sha224,
+    Sha256,
+    Sha384,
+    Sha512
+}
+
 /// <summary>The assurance obtained for FIPS 186-type domain parameters.</summary>
 public abstract class FfcDomainAssurance
 {
@@ -36,8 +47,14 @@ public abstract class FfcDomainAssurance
     public sealed class GeneratedOrValidated : FfcDomainAssurance
     {
         private readonly byte[] _seed;
-        internal GeneratedOrValidated(byte[] seed, int counter) { _seed = seed; Counter = counter; }
+        internal GeneratedOrValidated(byte[] seed, int counter, FfcDomainParameterHash hash)
+        {
+            _seed = seed;
+            Counter = counter;
+            Hash = hash;
+        }
         public int Counter { get; }
+        public FfcDomainParameterHash Hash { get; }
         public byte[] ExportSeed() => (byte[])_seed.Clone();
     }
 
@@ -47,11 +64,15 @@ public abstract class FfcDomainAssurance
         public string Authority { get; }
     }
 
-    public static FfcDomainAssurance Fips186GenerationOrValidation(ReadOnlySpan<byte> seed, int counter)
+    public static FfcDomainAssurance Fips186ProbablePrimeValidation(
+        ReadOnlySpan<byte> seed,
+        int counter,
+        FfcDomainParameterHash hash)
     {
         if (seed.IsEmpty) throw new ArgumentException("FIPS 186 validation evidence requires the generation seed.", nameof(seed));
         if (counter < 0) throw new ArgumentOutOfRangeException(nameof(counter));
-        return new GeneratedOrValidated(seed.ToArray(), counter);
+        if (!Enum.IsDefined(hash)) throw new ArgumentOutOfRangeException(nameof(hash));
+        return new GeneratedOrValidated(seed.ToArray(), counter, hash);
     }
 
     public static FfcDomainAssurance TrustedAuthority(string authority)
@@ -112,6 +133,10 @@ public sealed class FfcDomain
         var gValue = new BigInteger(1, g.ToArray());
         if (pValue.BitLength != 2048 || qValue.BitLength is not (224 or 256))
             throw new ArgumentException("FIPS 186-type parameters must use the FB or FC size set.");
+
+        if (assurance is FfcDomainAssurance.GeneratedOrValidated validation)
+            ValidateProbablePrimeEvidence(pValue, qValue, validation);
+
         if (!pValue.IsProbablePrime(100) || !qValue.IsProbablePrime(100))
             throw new ArgumentException("FFC p and q must be prime.");
         if (!pValue.Subtract(BigInteger.One).Mod(qValue).Equals(BigInteger.Zero))
@@ -122,6 +147,96 @@ public sealed class FfcDomain
 
         return new FfcDomain(null, new DHParameters(pValue, gValue, qValue), assurance);
     }
+
+    private static void ValidateProbablePrimeEvidence(
+        BigInteger p,
+        BigInteger q,
+        FfcDomainAssurance.GeneratedOrValidated evidence)
+    {
+        const int l = 2048;
+        int nBits = q.BitLength;
+        byte[] seed = evidence.ExportSeed();
+        int seedBits = checked(seed.Length * 8);
+        IDigest digest = CreateDigest(evidence.Hash);
+        int outputBits = digest.GetDigestSize() * 8;
+
+        if (seedBits < nBits)
+            throw new ArgumentException("FIPS 186 validation seed length must be at least N bits.", nameof(evidence));
+        if (outputBits < nBits)
+            throw new ArgumentException("The selected hash output is too short for q.", nameof(evidence));
+        if (evidence.Counter >= 4 * l)
+            throw new ArgumentException("FIPS 186 validation counter exceeds 4L - 1.", nameof(evidence));
+
+        BigInteger u = HashInteger(digest, seed).Mod(BigInteger.One.ShiftLeft(nBits - 1));
+        BigInteger expectedQ = BigInteger.One.ShiftLeft(nBits - 1)
+            .Add(u)
+            .Add(BigInteger.One)
+            .Subtract(u.Mod(BigInteger.Two));
+        if (!expectedQ.Equals(q))
+            throw new ArgumentException("FIPS 186 seed and hash do not reproduce q.", nameof(evidence));
+
+        int n = (l - 1) / outputBits;
+        int b = (l - 1) % outputBits;
+        int offset = 1;
+        BigInteger modulus = BigInteger.One.ShiftLeft(seedBits);
+        BigInteger seedValue = new(1, seed);
+
+        for (int i = 0; i <= evidence.Counter; i++)
+        {
+            BigInteger w = BigInteger.Zero;
+            for (int j = 0; j <= n; j++)
+            {
+                BigInteger argument = seedValue.Add(BigInteger.ValueOf(offset + j)).Mod(modulus);
+                byte[] encoded = ToFixedUnsigned(argument, seed.Length);
+                BigInteger v = HashInteger(digest, encoded);
+                if (j == n)
+                    v = v.Mod(BigInteger.One.ShiftLeft(b));
+                w = w.Add(v.ShiftLeft(j * outputBits));
+            }
+
+            BigInteger x = w.Add(BigInteger.One.ShiftLeft(l - 1));
+            BigInteger c = x.Mod(q.ShiftLeft(1));
+            BigInteger candidate = x.Subtract(c.Subtract(BigInteger.One));
+            if (candidate.CompareTo(BigInteger.One.ShiftLeft(l - 1)) >= 0 && candidate.IsProbablePrime(100))
+            {
+                if (i == evidence.Counter && candidate.Equals(p))
+                    return;
+
+                throw new ArgumentException("FIPS 186 seed and hash produce a prime before the supplied counter.", nameof(evidence));
+            }
+
+            offset = checked(offset + n + 1);
+        }
+
+        throw new ArgumentException("FIPS 186 seed, counter, and hash do not reproduce prime p.", nameof(evidence));
+    }
+
+    private static BigInteger HashInteger(IDigest digest, byte[] input)
+    {
+        digest.Reset();
+        digest.BlockUpdate(input, 0, input.Length);
+        byte[] output = new byte[digest.GetDigestSize()];
+        digest.DoFinal(output, 0);
+        return new BigInteger(1, output);
+    }
+
+    private static byte[] ToFixedUnsigned(BigInteger value, int length)
+    {
+        byte[] encoded = value.ToByteArrayUnsigned();
+        if (encoded.Length == length) return encoded;
+        byte[] result = new byte[length];
+        Buffer.BlockCopy(encoded, 0, result, length - encoded.Length, encoded.Length);
+        return result;
+    }
+
+    private static IDigest CreateDigest(FfcDomainParameterHash hash) => hash switch
+    {
+        FfcDomainParameterHash.Sha224 => new Sha224Digest(),
+        FfcDomainParameterHash.Sha256 => new Sha256Digest(),
+        FfcDomainParameterHash.Sha384 => new Sha384Digest(),
+        FfcDomainParameterHash.Sha512 => new Sha512Digest(),
+        _ => throw new ArgumentOutOfRangeException(nameof(hash))
+    };
 
     internal void ValidatePrivate(BigInteger x)
     {
