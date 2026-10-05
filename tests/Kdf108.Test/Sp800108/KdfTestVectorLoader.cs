@@ -11,53 +11,47 @@ using Kdf108.Internal;
 namespace Kdf108.Test.Sp800108;
 
 /// <summary>
-/// Zero-skip test vector loader that enforces strict loading of all test vectors.
-/// This loader implements a strict policy: ALL test vectors MUST be loaded and executed.
+/// Strict test-vector loader that accounts for every vector in the pinned corpus.
+/// Conforming vectors are executed; disallowed TDEA vectors are counted as legacy diagnostics.
 /// </summary>
 public static class KdfTestVectorLoader
 {
     // Hard minimum test counts - strict validation enforced
-    private static readonly Dictionary<string, int> MinimumTestCounts = new()
+    private static readonly Dictionary<string, (int Conforming, int Legacy)> ExpectedTestCounts = new()
     {
-        { "KDFCTR_gen.rsp", 4800 },
-        { "KDFDblPipelineWithCtr_gen.rsp", 4800 },
-        { "KDFDblPipelineWOCtr_gen.rsp", 400 },
-        { "KDFFeedbackNoCtr_gen.rsp", 400 },
-        { "KDFFeedbackNoZeroIV_gen.rsp", 4800 },
-        { "KDFFeedbackWithZeroIV_gen.rsp", 4800 }
+        { "KDFCTR_gen.rsp", (3840, 960) },
+        { "KDFDblPipelineWithCtr_gen.rsp", (3840, 960) },
+        { "KDFDblPipelineWOCtr_gen.rsp", (320, 80) },
+        { "KDFFeedbackNoCtr_gen.rsp", (320, 80) },
+        { "KDFFeedbackNoZeroIV_gen.rsp", (3840, 960) },
+        { "KDFFeedbackWithZeroIV_gen.rsp", (3840, 960) }
     };
 
     public static IEnumerable<KdfTestVector> LoadCounterModeVectors(string filePath)
     {
-        var vectors = LoadVectorsWithValidation(filePath, TestVectorMode.Counter).ToList();
-        ValidateMinimumTestCount(filePath, vectors.Count);
-        return vectors;
+        return LoadVectorsWithValidation(filePath, TestVectorMode.Counter);
     }
 
     public static IEnumerable<KdfTestVector> LoadFeedbackVectors(string filePath)
     {
-        var vectors = LoadVectorsWithValidation(filePath, TestVectorMode.Feedback).ToList();
-        ValidateMinimumTestCount(filePath, vectors.Count);
-        return vectors;
+        return LoadVectorsWithValidation(filePath, TestVectorMode.Feedback);
     }
 
     public static IEnumerable<KdfTestVector> LoadDoublePipelineVectors(string filePath)
     {
-        var vectors = LoadVectorsWithValidation(filePath, TestVectorMode.DoublePipeline).ToList();
-        ValidateMinimumTestCount(filePath, vectors.Count);
-        return vectors;
+        return LoadVectorsWithValidation(filePath, TestVectorMode.DoublePipeline);
     }
 
-    private static void ValidateMinimumTestCount(string filePath, int actualCount)
+    private static void ValidateExactTestCounts(string filePath, int conformingCount, int legacyCount)
     {
         var fileName = Path.GetFileName(filePath);
-        if (MinimumTestCounts.TryGetValue(fileName, out int expectedMinimum))
+        if (ExpectedTestCounts.TryGetValue(fileName, out var expected))
         {
-            if (actualCount < expectedMinimum)
+            if (conformingCount != expected.Conforming || legacyCount != expected.Legacy)
             {
                 throw new InvalidOperationException(
-                    $"Test validation failed: Expected at least {expectedMinimum} test vectors in {fileName}, " +
-                    $"but only loaded {actualCount}. Zero-skip policy violation!");
+                    $"Test validation failed: Expected {expected.Conforming} conforming and {expected.Legacy} legacy TDEA " +
+                    $"vectors in {fileName}, but found {conformingCount} and {legacyCount}. Classification drift is forbidden.");
             }
         }
         else
@@ -91,7 +85,8 @@ public static class KdfTestVectorLoader
 
         bool hasCounter = !filePath.Contains("NoCtr") && !filePath.Contains("nocounter");
         
-        var vectors = ParseVectorsStrict(lines, mode, hasCounter, filePath).ToList();
+        var parsed = ParseVectorsStrict(lines, mode, hasCounter, filePath);
+        var vectors = parsed.Vectors;
         
         if (vectors.Count == 0)
         {
@@ -100,10 +95,11 @@ public static class KdfTestVectorLoader
                 $"This violates the zero-skip policy!");
         }
 
+        ValidateExactTestCounts(filePath, vectors.Count, parsed.LegacyCount);
         return vectors;
     }
 
-    private static IEnumerable<KdfTestVector> ParseVectorsStrict(
+    private static ParseResult ParseVectorsStrict(
         List<string> lines, 
         TestVectorMode mode, 
         bool hasCounter, 
@@ -111,19 +107,29 @@ public static class KdfTestVectorLoader
     {
         var results = new List<KdfTestVector>();
         PrfType? currentPrf = null;
+        bool currentPrfIsLegacy = false;
+        bool hasCurrentPrf = false;
         CounterLocation? currentCtrlocation = null;
         int? currentRlen = null;
         Dictionary<string, string> currentVector = new();
         int? currentCount = null;
         int lineNumber = 0;
+        int legacyCount = 0;
 
         void AddCurrentVector()
         {
-            if (IsCompleteVector(currentVector) && currentCount.HasValue && currentPrf.HasValue)
+            if (IsCompleteVector(currentVector) && currentCount.HasValue && hasCurrentPrf)
             {
-                var vector = CreateVectorStrict(currentCount.Value, currentVector, currentPrf.Value, 
-                    currentCtrlocation ?? CounterLocation.BeforeFixed, currentRlen ?? 32, mode, filePath);
-                results.Add(vector);
+                if (currentPrfIsLegacy)
+                {
+                    legacyCount++;
+                }
+                else
+                {
+                    var vector = CreateVectorStrict(currentCount.Value, currentVector, currentPrf!.Value,
+                        currentCtrlocation ?? CounterLocation.BeforeFixed, currentRlen ?? 32, mode, filePath);
+                    results.Add(vector);
+                }
                 currentVector = new Dictionary<string, string>();
                 currentCount = null;
             }
@@ -139,7 +145,9 @@ public static class KdfTestVectorLoader
                 {
                     AddCurrentVector();
                     string prfName = line.Substring(5, line.Length - 6);
-                    currentPrf = ParsePrfTypeStrict(prfName, filePath, lineNumber);
+                    currentPrfIsLegacy = prfName is "CMAC_TDES2" or "CMAC_TDES3";
+                    currentPrf = currentPrfIsLegacy ? null : ParsePrfTypeStrict(prfName, filePath, lineNumber);
+                    hasCurrentPrf = true;
                 }
                 else if (hasCounter && line.StartsWith("[CTRLOCATION="))
                 {
@@ -157,7 +165,7 @@ public static class KdfTestVectorLoader
                 {
                     AddCurrentVector();
 
-                    if (currentPrf == null)
+                    if (!hasCurrentPrf)
                     {
                         throw new InvalidOperationException(
                             $"Test parsing failed: COUNT found before PRF definition in {filePath} at line {lineNumber}");
@@ -180,7 +188,7 @@ public static class KdfTestVectorLoader
                 }
                 else if (line.Contains('='))
                 {
-                    if (currentPrf == null)
+                    if (!hasCurrentPrf)
                     {
                         throw new InvalidOperationException(
                             $"Test parsing failed: Data line found before PRF definition in {filePath} at line {lineNumber}");
@@ -213,7 +221,7 @@ public static class KdfTestVectorLoader
                 $"Test validation failed: No vectors produced from {filePath}. This violates zero-skip policy!");
         }
 
-        return results;
+        return new ParseResult(results, legacyCount);
     }
 
     private static KdfTestVector CreateVectorStrict(
@@ -331,8 +339,6 @@ public static class KdfTestVectorLoader
             "CMAC_AES128" => PrfType.CmacAes128,
             "CMAC_AES192" => PrfType.CmacAes192,
             "CMAC_AES256" => PrfType.CmacAes256,
-            "CMAC_TDES3" => PrfType.CmacTdes3,
-            "CMAC_TDES2" => PrfType.CmacTdes2,
             "HMAC_SHA1" => PrfType.HmacSha1,
             "HMAC_SHA224" => PrfType.HmacSha224,
             "HMAC_SHA256" => PrfType.HmacSha256,
@@ -421,4 +427,6 @@ public static class KdfTestVectorLoader
         Feedback,
         DoublePipeline
     }
+
+    private sealed record ParseResult(List<KdfTestVector> Vectors, int LegacyCount);
 }

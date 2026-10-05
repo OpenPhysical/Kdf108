@@ -132,7 +132,6 @@ internal class Sp80056COptionsValidator : AbstractValidator<Sp80056COptions>
             PrfType.CmacAes128 => 16,
             PrfType.CmacAes192 => 16,
             PrfType.CmacAes256 => 16,
-            PrfType.CmacTdes3 => 8,
             _ => 32
         };
 

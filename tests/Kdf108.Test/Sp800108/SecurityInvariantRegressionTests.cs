@@ -32,9 +32,6 @@ public class SecurityInvariantRegressionTests
     [TestCase(PrfType.CmacAes128, 15)]
     [TestCase(PrfType.CmacAes192, 16)]
     [TestCase(PrfType.CmacAes256, 24)]
-    [TestCase(PrfType.CmacTdes3, 16)]
-    [TestCase(PrfType.CmacTdes2, 15)]
-    [TestCase(PrfType.CmacTdes2, 17)]
     public void CmacPrfs_RejectWrongKeySize(PrfType type, int keySize)
     {
         Assert.Throws<ArgumentException>(() =>

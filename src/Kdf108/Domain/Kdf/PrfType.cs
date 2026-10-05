@@ -97,26 +97,5 @@ public enum PrfType
     /// Specifies the CMAC-AES-256 (Cipher-based Message Authentication Code with 256-bit AES)
     /// pseudorandom function type for key derivation.
     /// </summary>
-    CmacAes256,
-
-    /// <summary>
-    /// Specifies the CMAC-TDES-3 (Cipher-based Message Authentication Code with three-key TDES)
-    /// pseudorandom function type for key derivation.
-    /// </summary>
-    /// <remarks>
-    /// CMAC-TDES-3 uses the Triple Data Encryption Standard with three independent 56-bit keys
-    /// (168 bits total) to provide backward compatibility with legacy systems while maintaining
-    /// reasonable security properties.
-    /// </remarks>
-    CmacTdes3,
-
-    /// <summary>
-    /// Specifies the CMAC-TDES-2 (Cipher-based Message Authentication Code with two-key TDES)
-    /// pseudorandom function type for key derivation.
-    /// </summary>
-    /// <remarks>
-    /// CMAC-TDES-2 uses the Triple Data Encryption Standard with two independent 56-bit keys
-    /// (112 bits total) for environments requiring TDES compatibility with reduced key material.
-    /// </remarks>
-    CmacTdes2
+    CmacAes256
 }

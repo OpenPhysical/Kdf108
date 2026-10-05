@@ -53,9 +53,7 @@ public static class PrfFactory
             // CMAC PRFs
             [PrfType.CmacAes128] = static () => new CmacPrf(static () => new AesEngine(), 128, 16),
             [PrfType.CmacAes192] = static () => new CmacPrf(static () => new AesEngine(), 128, 24),
-            [PrfType.CmacAes256] = static () => new CmacPrf(static () => new AesEngine(), 128, 32),
-            [PrfType.CmacTdes3] = static () => new CmacPrf(static () => new DesEdeEngine(), 64, 24),
-            [PrfType.CmacTdes2] = static () => new CmacTdes2Prf()
+            [PrfType.CmacAes256] = static () => new CmacPrf(static () => new AesEngine(), 128, 32)
         };
 
     /// <summary>

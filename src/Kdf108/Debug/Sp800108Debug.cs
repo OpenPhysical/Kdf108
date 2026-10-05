@@ -171,7 +171,6 @@ public static class Sp800108Debug
             PrfType.CmacAes128 => 128,
             PrfType.CmacAes192 => 128,
             PrfType.CmacAes256 => 128,
-            PrfType.CmacTdes3 => 64,
             _ => 256
         };
     }

@@ -20,8 +20,8 @@ namespace Kdf108.Test.Sp800108;
 ///     configurations loaded dynamically for each test case.
 /// </remarks>
 [TestFixture]
-[Category("CAVP")]
-[Explicit]
+[Category("CAVP-SP800-108")]
+[Category("LongRunning")]
 [Parallelizable(ParallelScope.All)]
 // Loads the NIST SP 800-108 RSP File Test Vectors
 public class RspVectorCounterModeTests
@@ -143,29 +143,8 @@ public class RspVectorCounterModeTests
             }
         }
 
-        // For TDES3, we might have size mismatches because the output is only 8 bytes (64 bits)
-        if (vector.PrfType == PrfType.CmacTdes3)
-        {
-            // For TDES, we need to check only the available bytes
-            int bytesToCheck = Math.Min(output.Length, vector.Ko.Length);
-
-            // Create a new byte array with just the bytes we want to compare
-            byte[] truncatedOutput = new byte[bytesToCheck];
-            byte[] truncatedExpected = new byte[bytesToCheck];
-
-            Buffer.BlockCopy(output, 0, truncatedOutput, 0, bytesToCheck);
-            Buffer.BlockCopy(vector.Ko, 0, truncatedExpected, 0, bytesToCheck);
-
-            Assert.That(truncatedOutput, Is.EqualTo(truncatedExpected),
-                $"Vector {vector.Count} failed with PRF={vector.PrfType}, CtrlLoc={vector.CounterLocation}, Rlen={vector.RlenBits}.");
-        }
-        else
-        {
-            // For all other PRFs, do a direct comparison
-            Assert.That(output, Is.EqualTo(vector.Ko),
-                $"Vector {vector.Count} failed with PRF={vector.PrfType}, CtrlLoc={vector.CounterLocation}, Rlen={vector.RlenBits}.");
-        }
+        Assert.That(output, Is.EqualTo(vector.Ko),
+            $"Vector {vector.Count} failed with PRF={vector.PrfType}, CtrlLoc={vector.CounterLocation}, Rlen={vector.RlenBits}.");
     }
 
 }
-
