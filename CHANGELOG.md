@@ -2,7 +2,7 @@
 
 Notable changes for each release are documented here.
 
-## [3.0.0] - Unreleased
+## [3.0.0] - 2026-10-04
 
 Version 3 is a new API. See the [migration guide](docs/migration-v3.md) for the mapping from 2.x.
 
