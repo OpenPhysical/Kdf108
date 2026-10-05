@@ -1,0 +1,4 @@
+- name: Guide
+  href: docs/toc.yml
+- name: API reference
+  href: docs/api/

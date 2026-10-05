@@ -14,7 +14,6 @@
         }
       ],
       "dest": "docs/api",
-      "filter": "filterConfig.yml",
       "disableGitFeatures": false,
       "disableDefaultFilter": false
     }
@@ -23,14 +22,15 @@
     "content": [
       {
         "files": [
-          "docs/api/**.yml",
-          "docs/api/index.md"
+          "docs/api/**.yml"
         ]
       },
       {
         "files": [
+          "index.md",
+          "toc.yml",
           "docs/**.md",
-          "*.md"
+          "docs/toc.yml"
         ],
         "exclude": [
           "docs/api/**"
@@ -51,22 +51,24 @@
       "default",
       "modern"
     ],
-    "postProcessors": ["ExtractSearchIndex"],
+    "postProcessors": [
+      "ExtractSearchIndex"
+    ],
     "markdownEngineName": "markdig",
     "noLangKeyword": false,
     "keepFileLink": false,
     "cleanupCacheHistory": false,
     "disableGitFeatures": false,
     "globalMetadata": {
-      "_appTitle": "Kdf108 API Documentation",
+      "_appTitle": "Kdf108",
       "_appName": "Kdf108",
       "_appFooter": "Kdf108 Cryptographic Library",
       "_enableSearch": true,
       "_gitContribute": {
-        "repo": "https://github.com/mistial-dev/Kdf108",
-        "branch": "main"
+        "repo": "https://github.com/OpenPhysical/Kdf108",
+        "branch": "master"
       },
-      "_baseUrl": "https://mistial-dev.github.io/Kdf108/"
+      "_baseUrl": "https://openphysical.github.io/Kdf108/"
     }
   }
 }

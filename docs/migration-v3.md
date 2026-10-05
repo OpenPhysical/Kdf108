@@ -1,51 +1,38 @@
-# Migrating to Kdf108 3.0
+# Migrating to 3.0
 
-Version 3 targets .NET 9 and .NET 10. It introduces immutable, closed SP 800-56C request types
-so callers cannot combine extraction and expansion algorithms that the recommendation forbids.
-The 2.x `Sp80056COptions`, builder, and pipeline classes are no longer public API.
+Version 3 replaces the whole public surface with one consistent API. Everything now lives in the
+`Kdf108` namespace. Nothing needs disposing, lengths are `BitLength`, and every failure is a
+`Kdf108Exception`.
 
-## One-step derivation
+| 2.x | 3.0 |
+|---|---|
+| `KdfEngine`, `IKdfEngine`, `KdfFactory`, `IKdf`, `KdfEngineLegacy` | `Sp800108` (static) or `ISp800108Kdf` (DI) |
+| `CounterModeKdf`, `FeedbackModeKdf`, `DoublePipelineKdf` | `Sp800108.Derive(key, prf, KeyExpansion.Counter/Feedback/DoublePipeline(...), length)` |
+| `KdfOptions`, `KdfOptionsBuilder`, `KdfRequest`, `KdfMode`, `CounterLocation` | `KeyExpansion` factories with `CounterPosition` or `IterationCounterPosition` |
+| `PrfType.HmacSha256`, `PrfType.CmacAes128` | `Prf.Hmac(NistHashAlgorithm.Sha256)`, `Prf.AesCmac(128)` |
+| `string` label, `byte[]` context, `long` bits | `ReadOnlySpan<byte>` label and context, `BitLength` |
+| `Sp800108Kmac.DeriveKey` | `Sp800108.DeriveKmac` |
+| `Sp80056COneStep.Derive(new OneStepKdfRequest(...))` | `Sp80056C.OneStep(z, OneStepFunction..., fixedInfo, length, strength)` |
+| `Sp80056CTwoStep.Derive(new TwoStepKdfRequest(...))` | `Sp80056C.TwoStep(...)`, or `Sp80056C.Extract` plus `Sp800108.Derive` per key |
+| `OneStepAuxiliaryFunction`, `TwoStepExtraction` | `OneStepFunction`, `Extraction` |
+| `Sp80056COneStepKdf`, `Sp80056CTwoStepKdf`, `Sp80056COptions`, `ISp80056CKeyDerivationPipeline` | `Sp80056C` |
+| `EcPrivateKey`, `EcPublicKey`, `EcKeyPair`, `CurveRegistry` (curve-name strings) | `EcDomain.Named(EcCurve...)`, `EcStatic/EphemeralPublicKey`, `EcStatic/EphemeralKeyPair` |
+| `Sp80056AEcdhKeyAgreement`, `Sp80056APrivateKey`, `Sp80056APublicKey`, the validators | `EcSchemes` / `IEcKeyAgreement` |
+| `EcdhKeyAgreement.Compute*`, `EcMqvKeyAgreement.Compute*` | `EcSchemes.Ephemeral`, `Static`, `Hybrid`, `OneFlowAsPartyU/V`, `HybridOneFlowAsPartyU/V`, `Mqv2`, `Mqv1AsPartyU/V` |
+| `FfcKeyAgreement.DiffieHellman`, `FfcSchemes.DhEphemeral`, `DhHybrid1`, ... | `FfcSchemes` with the same method names as `EcSchemes` |
+| `FfcDomainAssurance.Fips186ProbablePrimeValidation(seed, counter, FfcDomainParameterHash)` | `FfcDomainAssurance.Fips186Evidence(seed, counter, NistHashAlgorithm)` |
+| `SharedSecret` | `byte[]` (clear it when done) |
+| `Sp80056AKeyConfirmation`, `KeyConfirmationAlgorithm`, `KeyConfirmationParty` | `KeyConfirmation` / `IKeyConfirmation`, `KeyConfirmationMac`, `Party` |
+| `SecureKeyDerivation` (`Kdf108.Simple`) | `Sp800108.Derive` and the SP 800-56A/56C classes directly |
+| per-call `ILogger` parameters, `Sp800108Debug`, `Sp80056ADebug` | the DI services, which log through `ILogger<T>` |
+| About 30 exception types | `Kdf108Exception`: `KdfParameterException`, `InvalidKeyException` (with `KeyFailure`), `KeyAgreementException` |
 
-Construct a `OneStepKdfRequest` with a `BitLength`, `SecurityStrength`, and one of the factories
-on `OneStepAuxiliaryFunction`, then call `Sp80056COneStep.Derive`.
+Behavior changes to be aware of:
 
-```csharp
-var request = new OneStepKdfRequest(
-    sharedSecret,
-    fixedInfo,
-    BitLength.Create(256),
-    SecurityStrength.Bits128,
-    OneStepAuxiliaryFunction.HmacFunction(NistHashAlgorithm.Sha256));
-
-byte[] key = Sp80056COneStep.Derive(request);
-```
-
-`fixedInfo` is a byte string. Encode protocol fields explicitly so both parties use one canonical,
-unambiguous representation.
-
-## Two-step derivation
-
-Choose extraction first. HMAC extraction fixes the expansion PRF to the same HMAC. AES-CMAC
-extraction fixes expansion to AES-128-CMAC. The API does not expose the forbidden pairings.
-
-```csharp
-var request = new TwoStepKdfRequest(
-    sharedSecret,
-    TwoStepExtraction.HmacFunction(NistHashAlgorithm.Sha256),
-    SecurityStrength.Bits128,
-    new[]
-    {
-        KeyExpansion.CounterMode(fixedInfo, BitLength.Create(256))
-    });
-
-byte[] key = Sp80056CTwoStep.Derive(request)[0];
-```
-
-Output length is measured in bits. A request for 9 bits returns two bytes with the unused low
-seven bits of the final byte cleared.
-
-## Text labels
-
-Pass protocol labels as bytes. If a protocol defines labels as text, encode them with strict UTF-8.
-Malformed UTF-16 input is rejected rather than replaced, preventing different labels from
-collapsing to the same derivation input.
+- SP 800-108 counter widths are limited to 8, 16, 24, and 32 bits. Other widths were encoded
+  incorrectly before.
+- KMAC key confirmation now uses the customization string "KC", and the tag length is KMAC's
+  output length. Tags from 2.x KMAC key confirmation will not verify.
+- EC public keys with x = 0 or y = 0 are now accepted, as the standard requires.
+- FIPS 186-type parameters vouched for by a trusted authority skip the primality tests; the
+  authority provides that assurance. Use `Fips186Evidence` to have the library check primality.
