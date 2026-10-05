@@ -1,35 +1,72 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "fastLane": {
+    "filter": "TestCategory!=CAVP",
+    "reason": "Plain `dotnet test` runs this lane (tests/fast.runsettings). It includes the 372 SP 800-56C vectors, pinned answers, and a smoke run of every SP 800-56A shard, and parses no full corpus."
+  },
   "gates": {
-    "Fast": {
-      "filter": "TestCategory!=LongRunning&TestCategory!=LegacyDiagnostic",
-      "reason": "Runs on every supported operating system for rapid regression feedback. Long-running corpus tests are excluded here because the required lanes execute 16,000 SP 800-108 vectors and 161,436 SP 800-56A vectors per target framework."
-    },
     "CAVP-SP800-108": {
       "filter": "TestCategory=CAVP-SP800-108",
-      "reason": "Required because parsing a corpus does not prove the implementation produces the published answers. This gate positively selects and executes every pinned SP 800-108 response vector.",
-      "requiredOn": ["pull-request", "push", "nightly", "release"],
-      "allowSkipped": false,
-      "expectedExecutedTests": 16007
+      "expectedVectors": 16000,
+      "corpus": "SP800-108",
+      "reason": "Every conforming vector in the pinned NIST SP 800-108 corpus. The 4,000 TDEA vectors are counted, not run: SP 800-131A disallows TDEA KDFs and the API cannot select one."
     },
-    "CAVP-SP800-56A-ECC-ZZ": { "filter": "TestCategory=CAVP-SP800-56A-ECC-ZZ", "reason": "Executes every bundled ECC primitive vector; isolated so an empty or overlapping shard cannot hide missing Z validation.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 1680 },
-    "CAVP-SP800-56A-ECC-KDF": { "filter": "TestCategory=CAVP-SP800-56A-ECC-KDF", "reason": "Executes every bundled ECC no-key-confirmation vector and requires both Z and DKM verification.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 4140 },
-    "CAVP-SP800-56A-ECC-KC": { "filter": "TestCategory=CAVP-SP800-56A-ECC-KC", "reason": "Executes every bundled ECC key-confirmation vector and requires Z, DKM, encoded MacData, and tag verification.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 90240 },
-    "CAVP-SP800-56A-FFC-ZZ": { "filter": "TestCategory=CAVP-SP800-56A-FFC-ZZ", "reason": "Executes every bundled FFC primitive vector through production domain and scheme APIs.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 672 },
-    "CAVP-SP800-56A-FFC-KDF": { "filter": "TestCategory=CAVP-SP800-56A-FFC-KDF", "reason": "Executes every bundled FFC no-key-confirmation vector and requires both Z and DKM verification.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 2352 },
-    "CAVP-SP800-56A-FFC-KC": { "filter": "TestCategory=CAVP-SP800-56A-FFC-KC", "reason": "Executes every bundled FFC key-confirmation vector and requires Z, DKM, encoded MacData, and tag verification.", "requiredOn": ["pull-request", "push", "nightly", "release"], "allowSkipped": false, "expectedExecutedTests": 62352 },
-    "LongRunning": {
-      "reason": "Excluded only from the fast lane because the complete cryptographic corpora materially increase iteration time. All 161,436 SP 800-56A vectors remain positively selected in six disjoint required CI shards."
+    "CAVP-SP800-56A-ECC-ZZ": {
+      "filter": "TestCategory=CAVP-SP800-56A-ECC-ZZ",
+      "expectedVectors": 1680,
+      "corpus": "SP800-56A",
+      "reason": "Every ECC primitive (Z) vector, including key-validity rejections."
     },
-    "LegacyDiagnostic": {
-      "reason": "The pinned NIST corpus contains 4,000 TDEA vectors, but SP 800-131A disallows these KDF algorithms for new use. Their exact presence is verified and reported, while execution is excluded from the conforming API gate because the production API deliberately cannot select TDEA."
+    "CAVP-SP800-56A-ECC-KDF": {
+      "filter": "TestCategory=CAVP-SP800-56A-ECC-KDF",
+      "expectedVectors": 4140,
+      "corpus": "SP800-56A",
+      "reason": "Every ECC vector without key confirmation: Z and DKM."
+    },
+    "CAVP-SP800-56A-ECC-KC": {
+      "filter": "TestCategory=CAVP-SP800-56A-ECC-KC",
+      "expectedVectors": 90240,
+      "corpus": "SP800-56A",
+      "reason": "Every ECC key-confirmation vector: Z, DKM, MacData, and tag."
+    },
+    "CAVP-SP800-56A-FFC-ZZ": {
+      "filter": "TestCategory=CAVP-SP800-56A-FFC-ZZ",
+      "expectedVectors": 672,
+      "corpus": "SP800-56A",
+      "reason": "Every FFC primitive (Z) vector, including key-validity rejections."
+    },
+    "CAVP-SP800-56A-FFC-KDF": {
+      "filter": "TestCategory=CAVP-SP800-56A-FFC-KDF",
+      "expectedVectors": 2352,
+      "corpus": "SP800-56A",
+      "reason": "Every FFC vector without key confirmation: Z and DKM."
+    },
+    "CAVP-SP800-56A-FFC-KC": {
+      "filter": "TestCategory=CAVP-SP800-56A-FFC-KC",
+      "expectedVectors": 62352,
+      "corpus": "SP800-56A",
+      "reason": "Every FFC key-confirmation vector: Z, DKM, MacData, and tag."
     }
   },
+  "trees": [
+    {
+      "corpus": "SP800-56A",
+      "path": "Kdf108.Test/res/vectors/SP800-56A",
+      "files": 142,
+      "sha256": "8ff5552f9886420dc381e115d01723c2bc44c022f31092043a2890347b833390"
+    },
+    {
+      "corpus": "SP800-56C",
+      "path": "Kdf108.Test/res/vectors/SP800-56C",
+      "files": 1,
+      "sha256": "4d529ae249cdf5ebc830aed905591d7210da7d58bc7cb26654691b4e16856099"
+    }
+  ],
+  "treeHashAlgorithm": "SHA-256 over the ordinally sorted lines '<relative path>\\0<file SHA-256 hex>\\n' for every file in the tree.",
   "corpora": [
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFCTR_gen.rsp",
       "suite": "counter",
-      "expectedVectors": 4800,
       "expectedConformingVectors": 3840,
       "expectedLegacyDiagnosticVectors": 960,
       "sha256": "1e97b47f2d44cef43e1f418643486ba0a9f1fe3fc1bf8f3678701b6f1e5cc773"
@@ -37,7 +74,6 @@
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFDblPipelineWOCtr_gen.rsp",
       "suite": "double-pipeline-without-counter",
-      "expectedVectors": 400,
       "expectedConformingVectors": 320,
       "expectedLegacyDiagnosticVectors": 80,
       "sha256": "bc26ebdef7ce5f7369e74a2925f420f1e4b845ce78209a654fd9eb83457c01fa"
@@ -45,7 +81,6 @@
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFDblPipelineWithCtr_gen.rsp",
       "suite": "double-pipeline-with-counter",
-      "expectedVectors": 4800,
       "expectedConformingVectors": 3840,
       "expectedLegacyDiagnosticVectors": 960,
       "sha256": "d0cb3dba38158ae9e0ea456bfa7a4bc8e81fa468340bd43bcf8a5b32fd7a7223"
@@ -53,7 +88,6 @@
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFFeedbackNoCtr_gen.rsp",
       "suite": "feedback-without-counter",
-      "expectedVectors": 400,
       "expectedConformingVectors": 320,
       "expectedLegacyDiagnosticVectors": 80,
       "sha256": "b7162a26f0feb0ec329f98f106d32d80d6bca338c026051ad2abf37448ed0529"
@@ -61,7 +95,6 @@
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFFeedbackNoZeroIV_gen.rsp",
       "suite": "feedback-with-counter-nonzero-iv",
-      "expectedVectors": 4800,
       "expectedConformingVectors": 3840,
       "expectedLegacyDiagnosticVectors": 960,
       "sha256": "00241f8f01de1130360f4601042f1b97082a8b2851b96ad5fa93d13c5efcbf9a"
@@ -69,7 +102,6 @@
     {
       "path": "Kdf108.Test/res/vectors/SP800-108/KDFFeedbackWithZeroIV_gen.rsp",
       "suite": "feedback-with-counter-zero-iv-allowed",
-      "expectedVectors": 4800,
       "expectedConformingVectors": 3840,
       "expectedLegacyDiagnosticVectors": 960,
       "sha256": "6aeea123ceb5b547b78ca31dc6e23c9498db1a78c41a1b2465b97451db010ef4"

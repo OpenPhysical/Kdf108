@@ -4,11 +4,12 @@
     <LangVersion>13.0</LangVersion>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591;CS1573;CS1572</WarningsAsErrors>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0"/>
-    <PackageReference Include="FluentValidation" Version="12.1.1"/>
-    <PackageReference Include="JetBrains.Annotations" Version="2026.2.0"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12"/>
   </ItemGroup>
 

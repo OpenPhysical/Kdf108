@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CAVP gates pass this file with a category filter. It replaces the fast-lane default,
+     so the gate's own filter is the only one applied. -->
+<RunSettings>
+  <RunConfiguration />
+</RunSettings>

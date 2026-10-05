@@ -1,153 +1,90 @@
-﻿using System;
+using System;
 using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Kdf108.Simple;
+using System.Text;
+using Org.BouncyCastle.Security;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using Microsoft.Extensions.Logging;
-using Kdf108.Examples.Infrastructure;
 
 namespace Kdf108.Examples.Commands;
 
-public class DeriveKeyCommand : AsyncCommand<DeriveKeyCommand.Settings>
+/// <summary>Derives a key from a key-derivation key with SP 800-108.</summary>
+public sealed class DeriveKeyCommand(IAnsiConsole console, ISp800108Kdf kdf, SecureRandom random) : Command<DeriveKeyCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
-        [Description("Master key in hex format")]
-        [CommandOption("-k|--master-key")]
-        public string MasterKey { get; init; } = "404142434445464748494A4B4C4D4E4F";
+        [Description("Key-derivation key as hex, at least 16 bytes. Omit it to use a fresh random 32-byte key.")]
+        [CommandOption("-k|--key")]
+        public string? Key { get; init; }
 
-        [Description("Purpose/label for the derived key")]
-        [CommandOption("-p|--purpose")]
-        public string Purpose { get; init; } = "encryption";
+        [Description("Label: what the key is for")]
+        [CommandOption("-l|--label")]
+        [DefaultValue("encryption")]
+        public string Label { get; init; } = "encryption";
 
-        [Description("Output length in bytes")]
-        [CommandOption("-l|--output-length")]
-        [DefaultValue(32)]
-        public int OutputLength { get; init; } = 32;
-
-        [Description("Context data in hex format (optional)")]
+        [Description("Context: who or what the key is bound to")]
         [CommandOption("-c|--context")]
-        public string? Context { get; init; }
+        [DefaultValue("user:42")]
+        public string Context { get; init; } = "user:42";
 
-        [Description("Enable verbose logging")]
+        [Description("Output length in bits")]
+        [CommandOption("-b|--bits")]
+        [DefaultValue(256)]
+        public int Bits { get; init; } = 256;
+
+        [Description("counter, feedback, double-pipeline, or kmac")]
+        [CommandOption("-m|--mode")]
+        [DefaultValue("counter")]
+        public string Mode { get; init; } = "counter";
+
+        [Description("Show the library's log messages")]
         [CommandOption("-v|--verbose")]
-        [DefaultValue(false)]
         public bool Verbose { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken)
+    /// <summary>The derivation itself, separate from the console output.</summary>
+    public static byte[] Derive(ISp800108Kdf kdf, ReadOnlySpan<byte> key, string mode, string label, string context, int bits)
     {
-        // Setup logging
-        var loggerFactory = LoggingSetup.CreateLoggerFactory(settings.Verbose);
-        var logger = loggerFactory.CreateLogger<DeriveKeyCommand>();
+        if (key.Length < 16)
+            throw new ArgumentException("Use a key-derivation key of at least 16 bytes (128 bits).", nameof(key));
+        byte[] labelBytes = Encoding.UTF8.GetBytes(label);
+        byte[] contextBytes = Encoding.UTF8.GetBytes(context);
+        var length = BitLength.Create(bits);
+        var prf = Prf.Hmac(NistHashAlgorithm.Sha256);
+        byte[] fixedInput = Sp800108.FixedInput(labelBytes, contextBytes, length);
 
-        // Display header
-        AnsiConsole.Write(new Rule("[cyan]SP 800-108 Key Derivation[/]").RuleStyle("grey"));
-        AnsiConsole.WriteLine();
+        return mode switch
+        {
+            "counter" => kdf.Derive(key, prf, labelBytes, contextBytes, length),
+            // Feedback mode starts from an IV. An empty IV is allowed; a per-derivation IV is also fine.
+            "feedback" => kdf.Derive(key, prf, KeyExpansion.Feedback(fixedInput, ReadOnlySpan<byte>.Empty), length),
+            "double-pipeline" => kdf.Derive(key, prf, KeyExpansion.DoublePipeline(fixedInput), length),
+            "kmac" => kdf.DeriveKmac(key, KmacVariant.Kmac256, labelBytes, contextBytes, length),
+            _ => throw new ArgumentException($"Unknown mode '{mode}'.", nameof(mode))
+        };
+    }
 
+    public override int Execute(CommandContext context, Settings settings, System.Threading.CancellationToken cancellationToken)
+    {
+        console.Header("SP 800-108 key derivation");
         try
         {
-            // Parse inputs
-            var masterKey = Convert.FromHexString(settings.MasterKey);
-            var contextData = settings.Context != null ? Convert.FromHexString(settings.Context) : null;
+            byte[] key = settings.Key is null ? SecureRandom.GetNextBytes(random, 32) : Convert.FromHexString(settings.Key);
+            byte[] derived = Derive(kdf, key, settings.Mode, settings.Label, settings.Context, settings.Bits);
 
-            // Show inputs
-            var inputTable = new Table()
-                .Border(TableBorder.Rounded)
-                .AddColumn("[blue]Parameter[/]")
-                .AddColumn("[green]Value[/]")
-                .AddRow("Master Key", $"{settings.MasterKey} ({masterKey.Length} bytes)")
-                .AddRow("Purpose", settings.Purpose)
-                .AddRow("Output Length", $"{settings.OutputLength} bytes")
-                .AddRow("Context", settings.Context ?? "[grey]None[/]");
-
-            AnsiConsole.Write(inputTable);
-            AnsiConsole.WriteLine();
-
-            // Perform key derivation with progress
-            byte[] derivedKey = Array.Empty<byte>();
-
-            await AnsiConsole.Progress()
-                .AutoClear(false)
-                .Columns(new ProgressColumn[]
-                {
-                    new TaskDescriptionColumn(),
-                    new ProgressBarColumn(),
-                    new PercentageColumn(),
-                    new SpinnerColumn(),
-                })
-                .StartAsync(async ctx =>
-                {
-                    var task = ctx.AddTask("[cyan]Deriving key...[/]");
-                    
-                    task.Increment(20);
-                    await Task.Delay(100); // Visual effect
-                    
-                    AnsiConsole.MarkupLine("   [grey]→ Initializing HMAC-SHA256 PRF[/]");
-                    task.Increment(20);
-                    await Task.Delay(100);
-                    
-                    AnsiConsole.MarkupLine("   [grey]→ Applying Counter Mode KDF[/]");
-                    task.Increment(20);
-                    await Task.Delay(100);
-                    
-                    // Actual derivation
-                    derivedKey = SecureKeyDerivation.DeriveKey(
-                        masterKey,
-                        settings.Purpose,
-                        settings.OutputLength,
-                        contextData,
-                        logger);
-                    
-                    task.Increment(40);
-                    AnsiConsole.MarkupLine("   [grey]→ Key derivation complete[/]");
-                });
-
-            AnsiConsole.WriteLine();
-
-            // Display result
-            var resultPanel = new Panel(
-                new Markup($"[green]Derived Key:[/]\n[yellow]{Convert.ToHexString(derivedKey)}[/]"))
-                .Header("[green]✓ Success[/]")
-                .BorderColor(Color.Green)
-                .Expand();
-
-            AnsiConsole.Write(resultPanel);
-
-            // Show additional details if verbose
-            if (settings.Verbose)
-            {
-                AnsiConsole.WriteLine();
-                AnsiConsole.Write(new Rule("[dim]Technical Details[/]").RuleStyle("grey"));
-                
-                var detailsTable = new Table()
-                    .Border(TableBorder.None)
-                    .HideHeaders()
-                    .AddColumn("")
-                    .AddColumn("")
-                    .AddRow("[grey]Algorithm:[/]", "HMAC-SHA256")
-                    .AddRow("[grey]Mode:[/]", "Counter (SP 800-108)")
-                    .AddRow("[grey]Counter Size:[/]", "32 bits")
-                    .AddRow("[grey]Counter Location:[/]", "Before Fixed Input");
-                
-                AnsiConsole.Write(detailsTable);
-            }
-
+            console.Write(ConsoleUi.Table(
+                ("Key-derivation key", settings.Key is null ? "random 32 bytes (pass --key to choose)" : ConsoleUi.Hex(key)),
+                ("Mode", settings.Mode == "kmac" ? "KMAC256 (§4.4)" : $"{settings.Mode}, HMAC-SHA-256, 32-bit counter"),
+                ("Label", settings.Label),
+                ("Context", settings.Context),
+                ("Output", $"{settings.Bits} bits: {ConsoleUi.Hex(derived)}")));
+            console.MarkupLine("[dim]A different label or context gives an independent key. Clear key material when you are done with it.[/]");
+            Array.Clear(key);
+            Array.Clear(derived);
             return 0;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is Kdf108Exception or ArgumentException or FormatException)
         {
-            logger.LogError(ex, "Error during key derivation");
-            
-            AnsiConsole.WriteLine();
-            AnsiConsole.Write(new Panel($"[red]Error:[/] {ex.Message}")
-                .Header("[red]✗ Failed[/]")
-                .BorderColor(Color.Red));
-            
-            return 1;
+            return console.Error(ex);
         }
     }
 }

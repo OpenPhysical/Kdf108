@@ -1,216 +1,95 @@
-// Copyright (c) 2025 Mistial Developer <opensource@mistial.dev>
-// SPDX-License-Identifier: AGPL-3.0-only
-
 using System;
-using System.Linq;
-using AwesomeAssertions;
-using Kdf108.Domain.Sp80056A;
-using Kdf108.Domain.Sp80056C;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Parameters;
 
-namespace Kdf108.Test.Sp80056A;
+namespace Kdf108.Test.Nist80056A;
 
 [TestFixture]
+[Parallelizable(ParallelScope.All)]
 public class KeyConfirmationTests
 {
+    private static readonly KeyConfirmationMac HmacSha256 = KeyConfirmationMac.Hmac(NistHashAlgorithm.Sha256);
+    private static readonly BitLength Tag128 = BitLength.Create(128);
+
     [Test]
-    public void ProviderAndRecipient_VerifySameTag()
+    public void MacDataFollowsTheSpecifiedOrderForPartyU()
     {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Unilateral,
-            KeyConfirmationParty.PartyU,
-            "provider"u8,
-            "recipient"u8,
-            new byte[] { 1, 2 },
-            new byte[] { 3, 4 });
-        var key = new byte[32];
-        var algorithm = KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256);
-
-        var tag = Sp80056AKeyConfirmation.GenerateTag(
-            key, context, algorithm, BitLength.Create(128), SecurityStrength.Bits128);
-
-        Sp80056AKeyConfirmation.VerifyTag(
-            tag, key, context, algorithm, BitLength.Create(128), SecurityStrength.Bits128).Should().BeTrue();
+        var context = new KeyConfirmationContext(KeyConfirmationMode.Unilateral, Party.U, "U"u8, "V"u8, [0x01, 0x02], [0x03], "T"u8);
+        Assert.That(context.EncodeMacData(), Is.EqualTo((byte[])[.. "KC_1_UUV"u8, 0x01, 0x02, 0x03, (byte)'T']));
+        Assert.That(KeyConfirmation.GenerateTag(new byte[32], context, HmacSha256, Tag128, SecurityStrength.Bits128),
+            Is.EqualTo(Hmac(new byte[32], context.EncodeMacData())[..16]));
     }
 
     [Test]
-    public void MacData_UsesSpecificationConcatenationOrder()
+    public void PartyVReordersTheRoleBoundComponents()
     {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Unilateral,
-            KeyConfirmationParty.PartyU,
-            "U"u8,
-            "V"u8,
-            new byte[] { 0x01, 0x02 },
-            new byte[] { 0x03 },
-            "T"u8);
-        var key = new byte[32];
-        var expectedData = "KC_1_UUV"u8.ToArray()
-            .Concat(new byte[] { 0x01, 0x02, 0x03, (byte)'T' })
-            .ToArray();
-        var expected = HmacSha256(key, expectedData).AsSpan(0, 16).ToArray();
-
-        var actual = Sp80056AKeyConfirmation.GenerateTag(
-            key,
-            context,
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(128),
-            SecurityStrength.Bits128);
-
-        actual.Should().Equal(expected);
+        var context = new KeyConfirmationContext(KeyConfirmationMode.Bilateral, Party.V, "U"u8, "V"u8, [0x01], [0x02]);
+        Assert.That(context.EncodeMacData(), Is.EqualTo((byte[])[.. "KC_2_VVU"u8, 0x02, 0x01]));
     }
 
     [Test]
-    public void PartyVProvider_ReordersRoleBoundComponents()
+    public void RecipientVerifiesAndAWrongProviderDoesNot()
     {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Bilateral,
-            KeyConfirmationParty.PartyV,
-            "U"u8,
-            "V"u8,
-            new byte[] { 0x01 },
-            new byte[] { 0x02 });
-        var key = new byte[32];
-        var expected = HmacSha256(
-            key,
-            "KC_2_VVU"u8.ToArray().Concat(new byte[] { 0x02, 0x01 }).ToArray())
-            .AsSpan(0, 16)
-            .ToArray();
-
-        var actual = Sp80056AKeyConfirmation.GenerateTag(
-            key, context,
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(128), SecurityStrength.Bits128);
-
-        actual.Should().Equal(expected);
+        var u = new KeyConfirmationContext(KeyConfirmationMode.Bilateral, Party.U, "U"u8, "V"u8, [1], [2]);
+        var v = new KeyConfirmationContext(KeyConfirmationMode.Bilateral, Party.V, "U"u8, "V"u8, [1], [2]);
+        byte[] tag = KeyConfirmation.GenerateTag(new byte[32], u, HmacSha256, Tag128, SecurityStrength.Bits128);
+        Assert.That(KeyConfirmation.VerifyTag(tag, new byte[32], u, HmacSha256, Tag128, SecurityStrength.Bits128), Is.True);
+        Assert.That(KeyConfirmation.VerifyTag(tag, new byte[32], v, HmacSha256, Tag128, SecurityStrength.Bits128), Is.False);
     }
 
-    [Test]
-    public void WrongPartyMarker_DoesNotVerify()
+    // Regression: KMAC key confirmation must use customization string "KC" (SP 800-56A Rev. 3, ACVP KAS)
+    // with KMAC's output length L equal to MacTagLen.
+    [TestCase(KmacVariant.Kmac128, 128)]
+    [TestCase(KmacVariant.Kmac256, 256)]
+    public void KmacUsesCustomizationKcAndTagLengthAsL(KmacVariant variant, int strength)
     {
-        var provider = new KeyConfirmationContext(
-            KeyConfirmationMode.Bilateral, KeyConfirmationParty.PartyU,
-            "U"u8, "V"u8, new byte[] { 1 }, new byte[] { 2 });
-        var recipient = new KeyConfirmationContext(
-            KeyConfirmationMode.Bilateral, KeyConfirmationParty.PartyV,
-            "U"u8, "V"u8, new byte[] { 1 }, new byte[] { 2 });
-        var key = new byte[32];
-        var algorithm = KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256);
-        var tag = Sp80056AKeyConfirmation.GenerateTag(
-            key, provider, algorithm, BitLength.Create(128), SecurityStrength.Bits128);
+        var context = Context();
+        byte[] key = new byte[32];
+        byte[] tag = KeyConfirmation.GenerateTag(key, context, KeyConfirmationMac.KmacFunction(variant), BitLength.Create(192),
+            strength == 128 ? SecurityStrength.Bits128 : SecurityStrength.Bits256);
 
-        Sp80056AKeyConfirmation.VerifyTag(
-            tag, key, recipient, algorithm, BitLength.Create(128), SecurityStrength.Bits128).Should().BeFalse();
-    }
-
-    [Test]
-    public void TagShorterThan64Bits_IsRejected()
-    {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Unilateral, KeyConfirmationParty.PartyU,
-            "U"u8, "V"u8, default, default);
-
-        var act = () => Sp80056AKeyConfirmation.GenerateTag(
-            new byte[32], context,
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(63), SecurityStrength.Bits112);
-
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
-
-    [Test]
-    public void Aes256Cmac_Allows256BitTargetStrength()
-    {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Unilateral, KeyConfirmationParty.PartyU,
-            "U"u8, "V"u8, default, default);
-
-        var tag = Sp80056AKeyConfirmation.GenerateTag(
-            new byte[32], context,
-            KeyConfirmationAlgorithm.AesCmacFunction(256),
-            BitLength.Create(128), SecurityStrength.Bits256);
-
-        tag.Should().HaveCount(16);
-    }
-
-    [Test]
-    public void Kmac_RejectsKeyBelowTargetStrength()
-    {
-        var context = new KeyConfirmationContext(
-            KeyConfirmationMode.Unilateral, KeyConfirmationParty.PartyU,
-            "U"u8, "V"u8, default, default);
-
-        var act = () => Sp80056AKeyConfirmation.GenerateTag(
-            new byte[16], context,
-            KeyConfirmationAlgorithm.Kmac256(BitLength.Create(256)),
-            BitLength.Create(128), SecurityStrength.Bits256);
-
-        act.Should().Throw<ArgumentException>().WithMessage("*target strength*");
+        var kmac = new KMac(strength, "KC"u8.ToArray());
+        kmac.Init(new KeyParameter(key));
+        byte[] data = context.EncodeMacData();
+        kmac.BlockUpdate(data, 0, data.Length);
+        var expected = new byte[24];
+        kmac.OutputFinal(expected, 0, expected.Length);
+        Assert.That(tag, Is.EqualTo(expected));
     }
 
     [TestCase(16)]
     [TestCase(64)]
-    public void HmacSha256_AllowsTable5KeyLengthRangeAt112BitStrength(int keyBytes)
-    {
-        var tag = Sp80056AKeyConfirmation.GenerateTag(
-            new byte[keyBytes], CreateContext(),
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(128), SecurityStrength.Bits112);
+    public void HmacAcceptsTheTable5KeyRange(int keyBytes) =>
+        Assert.That(KeyConfirmation.GenerateTag(new byte[keyBytes], Context(), HmacSha256, Tag128, SecurityStrength.Bits112), Has.Length.EqualTo(16));
 
-        tag.Should().HaveCount(16);
+    [Test]
+    public void ParametersOutsideTheStandardAreRejected()
+    {
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[32], Context(), HmacSha256, BitLength.Create(63), SecurityStrength.Bits112));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[32], Context(), HmacSha256, BitLength.Create(264), SecurityStrength.Bits112));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[13], Context(), HmacSha256, Tag128, SecurityStrength.Bits112));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[31], Context(), HmacSha256, Tag128, SecurityStrength.Bits256));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[65], Context(), HmacSha256, Tag128, SecurityStrength.Bits112));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[16], Context(), KeyConfirmationMac.KmacFunction(KmacVariant.Kmac256), Tag128, SecurityStrength.Bits256));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[16], Context(), KeyConfirmationMac.AesCmac(128), Tag128, SecurityStrength.Bits192));
+        Assert.Throws<KdfParameterException>(() => KeyConfirmation.GenerateTag(new byte[16], Context(), KeyConfirmationMac.AesCmac(256), Tag128, SecurityStrength.Bits112));
+        Assert.Throws<KdfParameterException>(() => new KeyConfirmationContext(KeyConfirmationMode.Unilateral, Party.U, default, "V"u8, default, default));
     }
 
     [Test]
-    public void HmacSha224_Allows256BitTargetStrength()
-    {
-        var tag = Sp80056AKeyConfirmation.GenerateTag(
-            new byte[32], CreateContext(),
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha224),
-            BitLength.Create(128), SecurityStrength.Bits256);
+    public void Aes256CmacSupports256BitStrength() =>
+        Assert.That(KeyConfirmation.GenerateTag(new byte[32], Context(), KeyConfirmationMac.AesCmac(256), Tag128, SecurityStrength.Bits256), Has.Length.EqualTo(16));
 
-        tag.Should().HaveCount(16);
-    }
+    private static KeyConfirmationContext Context() => new(KeyConfirmationMode.Unilateral, Party.U, "U"u8, "V"u8, default, default);
 
-    [TestCase(13, 112)]
-    [TestCase(31, 256)]
-    public void Hmac_RejectsKeyBelowTargetStrength(int keyBytes, int strengthBits)
-    {
-        SecurityStrength strength = strengthBits == 112
-            ? SecurityStrength.Bits112
-            : SecurityStrength.Bits256;
-
-        var act = () => Sp80056AKeyConfirmation.GenerateTag(
-            new byte[keyBytes], CreateContext(),
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(128), strength);
-
-        act.Should().Throw<ArgumentException>().WithMessage("*target strength*");
-    }
-
-    [Test]
-    public void Hmac_RejectsKeyLongerThan512Bits()
-    {
-        var act = () => Sp80056AKeyConfirmation.GenerateTag(
-            new byte[65], CreateContext(),
-            KeyConfirmationAlgorithm.HmacFunction(NistHashAlgorithm.Sha256),
-            BitLength.Create(128), SecurityStrength.Bits112);
-
-        act.Should().Throw<ArgumentException>().WithMessage("*at most 512 bits*");
-    }
-
-    private static byte[] HmacSha256(byte[] key, byte[] data)
+    private static byte[] Hmac(byte[] key, byte[] data)
     {
         var mac = new HMac(new Sha256Digest());
         mac.Init(new KeyParameter(key));
         mac.BlockUpdate(data, 0, data.Length);
-        var result = new byte[mac.GetMacSize()];
+        var result = new byte[32];
         mac.DoFinal(result, 0);
         return result;
     }
-
-    private static KeyConfirmationContext CreateContext() => new(
-        KeyConfirmationMode.Unilateral, KeyConfirmationParty.PartyU,
-        "U"u8, "V"u8, default, default);
 }

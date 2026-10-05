@@ -42,7 +42,8 @@ public sealed class CryptographyDependencyTests
         string forbidden = string.Concat("System.Security.", "Cryptography");
         var violations = new List<string>();
 
-        foreach (string assetsFile in Directory.EnumerateFiles(repository, "project.assets.json", SearchOption.AllDirectories))
+        foreach (string assetsFile in new[] { "src", "examples", "tests" }
+                     .SelectMany(area => Directory.EnumerateFiles(Path.Combine(repository, area), "project.assets.json", SearchOption.AllDirectories)))
         {
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsFile));
             foreach (JsonProperty package in document.RootElement.GetProperty("libraries").EnumerateObject())
