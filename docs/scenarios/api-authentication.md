@@ -39,6 +39,10 @@ using System.Text.Json;
 
 public class ApiTokenManager
 {
+    private const string AccessTokenType = "access-token";
+    private const string RefreshTokenType = "refresh-token";
+    private const string ApiKeyTokenType = "api-key";
+
     private readonly byte[] _masterKey;
     private readonly string _issuer;
     
@@ -72,7 +76,8 @@ public class ApiTokenManager
             Scopes = scopes
         };
         
-        var signingKey = GetTokenSigningKey(userId, clientId, tokenId, "access-token");
+        claims.TokenType = AccessTokenType;
+        var signingKey = GetTokenSigningKey(userId, clientId, tokenId, AccessTokenType);
         var tokenString = GenerateSignedToken(claims, signingKey);
         
         return new AccessToken
@@ -99,10 +104,10 @@ public class ApiTokenManager
             Issuer = _issuer,
             IssuedAt = DateTimeOffset.UtcNow,
             ExpiresAt = expiresAt,
-            TokenType = "refresh"
+            TokenType = RefreshTokenType
         };
         
-        var signingKey = GetTokenSigningKey(userId, clientId, tokenId, "refresh-token");
+        var signingKey = GetTokenSigningKey(userId, clientId, tokenId, RefreshTokenType);
         var tokenString = GenerateSignedToken(claims, signingKey);
         
         return new RefreshToken
@@ -129,10 +134,10 @@ public class ApiTokenManager
             IssuedAt = DateTimeOffset.UtcNow,
             ExpiresAt = expiresAt,
             Scopes = scopes,
-            TokenType = "api-key"
+            TokenType = ApiKeyTokenType
         };
         
-        var signingKey = GetTokenSigningKey(userId, keyName, tokenId, "api-key");
+        var signingKey = GetTokenSigningKey(userId, keyName, tokenId, ApiKeyTokenType);
         var tokenString = GenerateSignedToken(claims, signingKey);
         
         return new ApiKey
@@ -161,7 +166,7 @@ public class ApiTokenManager
             }
             
             // Check token type
-            var tokenType = claims.TokenType ?? "access-token";
+            var tokenType = claims.TokenType ?? AccessTokenType;
             if (tokenType != expectedTokenType)
             {
                 return TokenValidationResult.Invalid("Invalid token type");
