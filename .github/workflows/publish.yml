@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    environment: nuget-production
 
     permissions:
       contents: read
@@ -16,6 +17,36 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify annotated signed release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          GATE_REASON: A release tag authorizes publication of a cryptographic package and must be an annotated signature verified by GitHub.
+        run: |
+          set -euo pipefail
+          ref_json="$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/git/ref/tags/${RELEASE_TAG}")"
+          tag_sha="$(jq -r '.object.sha' <<<"${ref_json}")"
+          tag_type="$(jq -r '.object.type' <<<"${ref_json}")"
+          if [[ "${tag_type}" != "tag" ]]; then
+            echo "::error::Release gate failed: ${GATE_REASON} Lightweight tags are not accepted."
+            exit 1
+          fi
+          tag_json="$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/git/tags/${tag_sha}")"
+          if [[ "$(jq -r '.verification.verified' <<<"${tag_json}")" != "true" ]]; then
+            reason="$(jq -r '.verification.reason // "unknown"' <<<"${tag_json}")"
+            echo "::error::Release gate failed: ${GATE_REASON} Verification reason: ${reason}."
+            exit 1
+          fi
 
       - name: Setup .NET SDKs
         uses: actions/setup-dotnet@v4
@@ -27,14 +58,36 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Verify tag and package versions match
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GATE_REASON: The immutable package version must identify the exact signed source tag that authorized publication.
+        run: |
+          set -euo pipefail
+          tag_version="${RELEASE_TAG#v}"
+          project_version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' Directory.Build.props)"
+          if [[ -z "${project_version}" || "${tag_version}" != "${project_version}" ]]; then
+            echo "::error::Release gate failed: ${GATE_REASON} Tag=${tag_version}, project=${project_version:-missing}."
+            exit 1
+          fi
+
       - name: Build (Release configuration)
         run: dotnet build --no-restore -c Release
 
-      - name: Test
-        run: dotnet test --no-build -c Release
+      - name: Run fast release tests
+        env:
+          GATE_REASON: Fast tests catch ordinary regressions on every release without substituting for the complete conformance corpus.
+        run: dotnet test --no-build -c Release --filter "TestCategory!=LongRunning&TestCategory!=LegacyDiagnostic"
+
+      - name: Run complete release CAVP suites
+        env:
+          GATE_REASON: Release claims require executing authoritative known-answer vectors, not merely parsing or counting their files.
+        run: dotnet test --no-build -c Release --filter "(TestCategory=CAVP-SP800-108|TestCategory=CAVP-SP800-56A)"
 
       - name: Pack NuGet package
         run: dotnet pack src/Kdf108/Kdf108.csproj --no-build -c Release -o ./nupkg
 
-      - name: Push to NuGet.org
-        run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      - name: Push tested package to NuGet.org
+        env:
+          GATE_REASON: A version collision indicates an unexpected release-state mismatch and must fail visibly.
+        run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
