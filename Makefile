@@ -1,66 +1,26 @@
-# Kdf108 Makefile
+# Everyday work uses the dotnet CLI directly:
+#   dotnet build          build everything
+#   dotnet test           fast lane (tests/fast.runsettings: everything except the CAVP gates)
 
-# Variables
-DOTNET = dotnet
-DOCFX = docfx
-PROJECT_DIR = src/Kdf108
-DOCS_DIR = docs
-API_DOCS_DIR = $(DOCS_DIR)/api
-DOCFX_PROJECT = docfx.json
+GATES = CAVP-SP800-108 CAVP-SP800-56A-ECC-ZZ CAVP-SP800-56A-ECC-KDF CAVP-SP800-56A-FFC-ZZ \
+        CAVP-SP800-56A-FFC-KDF CAVP-SP800-56A-ECC-KC CAVP-SP800-56A-FFC-KC
+FRAMEWORK ?= net10.0
+RESULTS = artifacts/test-results
 
-# Default target
-.PHONY: all
-all: build
+.PHONY: cavp docs docs-serve
 
-# Build the project
-.PHONY: build
-build:
-	$(DOTNET) build
+# Runs and verifies every CAVP gate exactly as CI does (about two minutes on a laptop).
+cavp:
+	dotnet build tests/Kdf108.Test -c Release -f $(FRAMEWORK)
+	@for gate in $(GATES); do \
+		rm -rf $(RESULTS)/$$gate; \
+		dotnet test tests/Kdf108.Test -c Release -f $(FRAMEWORK) --no-build --settings tests/cavp.runsettings \
+			--filter "TestCategory=$$gate" --logger "trx;LogFileName=$$gate.trx" --results-directory $(RESULTS)/$$gate || exit 1; \
+		pwsh -NoProfile -File tests/verify-conformance-results.ps1 -ResultsDirectory $(RESULTS)/$$gate -GateName $$gate || exit 1; \
+	done
 
-# Run tests
-.PHONY: test
-test:
-	$(DOTNET) test
+docs:
+	docfx docfx.json
 
-# Clean build artifacts
-.PHONY: clean
-clean:
-	$(DOTNET) clean
-	rm -rf $(API_DOCS_DIR)
-	rm -rf _site
-	rm -rf obj
-
-# Install DocFX globally if not already installed
-.PHONY: install-docfx
-install-docfx:
-	@command -v $(DOCFX) >/dev/null 2>&1 || (echo "Installing DocFX..." && $(DOTNET) tool install -g docfx)
-
-# Generate documentation
-.PHONY: docs
-docs: install-docfx build
-	@echo "Generating API documentation..."
-	$(DOCFX) $(DOCFX_PROJECT) --serve=false
-
-# Generate and serve documentation locally
-.PHONY: docs-serve
-docs-serve: install-docfx build
-	@echo "Generating and serving API documentation..."
-	$(DOCFX) $(DOCFX_PROJECT) --serve
-
-# Generate documentation metadata only
-.PHONY: docs-metadata
-docs-metadata: install-docfx build
-	@echo "Generating documentation metadata..."
-	$(DOCFX) metadata $(DOCFX_PROJECT)
-
-# Help target
-.PHONY: help
-help:
-	@echo "Available targets:"
-	@echo "  make build         - Build the project"
-	@echo "  make test          - Run tests"
-	@echo "  make clean         - Clean build artifacts and generated docs"
-	@echo "  make docs          - Generate API documentation"
-	@echo "  make docs-serve    - Generate and serve documentation locally"
-	@echo "  make docs-metadata - Generate documentation metadata only"
-	@echo "  make help          - Show this help message"
+docs-serve:
+	docfx docfx.json --serve

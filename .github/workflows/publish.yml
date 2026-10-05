@@ -5,18 +5,25 @@ on:
     tags:
       - 'v*.*.*'  # e.g., v1.0.0
 
+permissions:
+  contents: read
+
 jobs:
+  # The release runs the same fast lane and all seven verified CAVP gates as CI.
+  conformance:
+    uses: ./.github/workflows/conformance.yml
+
   build-and-publish:
+    needs: conformance
     runs-on: ubuntu-latest
     environment: nuget-production
 
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -48,12 +55,21 @@ jobs:
             exit 1
           fi
 
+      - name: Verify the tag is on master
+        env:
+          GATE_REASON: Only reviewed commits on master may be released.
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/master; then
+            echo "::error::Release gate failed: ${GATE_REASON}"
+            exit 1
+          fi
+
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          global-json-file: global.json
+          dotnet-version: 9.0.x
 
       - name: Restore dependencies
         run: dotnet restore
@@ -71,21 +87,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build (Release configuration)
-        run: dotnet build --no-restore -c Release
-
-      - name: Run fast release tests
-        env:
-          GATE_REASON: Fast tests catch ordinary regressions on every release without substituting for the complete conformance corpus.
-        run: dotnet test --no-build -c Release --filter "TestCategory!=LongRunning&TestCategory!=LegacyDiagnostic"
-
-      - name: Run complete release CAVP suites
-        env:
-          GATE_REASON: Release claims require executing authoritative known-answer vectors, not merely parsing or counting their files.
-        run: dotnet test --no-build -c Release --filter "(TestCategory=CAVP-SP800-108|TestCategory=CAVP-SP800-56A)"
-
       - name: Pack NuGet package
-        run: dotnet pack src/Kdf108/Kdf108.csproj --no-build -c Release -o ./nupkg
+        run: dotnet pack src/Kdf108/Kdf108.csproj -c Release -o ./nupkg
 
       - name: Push tested package to NuGet.org
         env:
