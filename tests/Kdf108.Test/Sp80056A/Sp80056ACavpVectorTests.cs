@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using AwesomeAssertions;
 using Kdf108.Domain.Sp80056A;
 using Microsoft.Extensions.Logging.Testing;
@@ -15,11 +16,7 @@ namespace Kdf108.Test.Sp80056A;
 /// CAVP compliance tests for SP 800-56A key agreement schemes using individual test vectors.
 /// Each CAVP test vector becomes a separate, discoverable test case for comprehensive validation.
 /// </summary>
-[TestFixture]
-[Category("CAVP")]
-[Explicit]
-[Parallelizable(ParallelScope.All)]
-public class Sp80056ACavpVectorTests
+internal class Sp80056AEccCavpComputer
 {
     private static readonly FakeLogger<Sp80056AEcdhKeyAgreement> _ecdhLogger = new();
     /// <summary>
@@ -73,7 +70,6 @@ public class Sp80056ACavpVectorTests
     /// <param name="vector">The CAVP test vector to validate.</param>
     /// <param name="schemeName">The key agreement scheme name.</param>
     /// <param name="categoryCode">The test category code (ZZOnly, NoKC, KC).</param>
-    [TestCaseSource(nameof(GetAllCavpVectors))]
     public void TestCavpVector(CavpTestVector vector, string schemeName, string categoryCode)
     {
         try
@@ -94,9 +90,12 @@ public class Sp80056ACavpVectorTests
                     break;
             }
         }
-        catch (Exception) when (vector.ExpectFail)
+        catch (AssertionException)
         {
-            // Expected failure - this is acceptable for CAVP compliance testing
+            throw;
+        }
+        catch (Exception ex) when (vector.ExpectFail && IsExpectedKeyRejection(vector, ex))
+        {
             return;
         }
         catch (Exception ex) when (vector.ExpectPass)
@@ -111,11 +110,7 @@ public class Sp80056ACavpVectorTests
         // Test shared secret computation without KDF
         var sharedSecret = ComputeSharedSecretForScheme(vector, schemeName);
 
-        if (vector.ExpectPass)
-        {
-            sharedSecret.Should().NotBeNull();
-            sharedSecret.Should().Equal(vector.Z, $"Shared secret mismatch for {schemeName} vector {vector.Count}");
-        }
+        ValidateSharedSecret(vector, schemeName, sharedSecret);
     }
 
     private static void TestNoKeyConfirmationVector(CavpTestVector vector, string schemeName)
@@ -129,12 +124,9 @@ public class Sp80056ACavpVectorTests
             return;
         }
 
+        ValidateSharedSecret(vector, schemeName, sharedSecret);
         var derivedKey = Sp80056AConcatKdf.DeriveKeyMaterial(sharedSecret, vector.OI, vector.DKM.Length, vector.Hash);
-
-        if (vector.ExpectPass)
-        {
-            derivedKey.Should().Equal(vector.DKM, $"Derived key mismatch for {schemeName} vector {vector.Count}");
-        }
+        ValidateDerivedKey(vector, schemeName, derivedKey);
     }
 
     private static void TestKeyConfirmationVector(CavpTestVector vector, string schemeName)
@@ -148,18 +140,56 @@ public class Sp80056ACavpVectorTests
             return;
         }
 
+        ValidateSharedSecret(vector, schemeName, sharedSecret);
         var derivedKey = Sp80056AConcatKdf.DeriveKeyMaterial(sharedSecret, vector.OI, vector.DKM.Length, vector.Hash);
+        ValidateDerivedKey(vector, schemeName, derivedKey);
+        if (vector.MacData == null || vector.CAVSTag == null)
+            Assert.Fail($"Missing key-confirmation fields for {schemeName} vector {vector.Count}");
 
-        if (vector.ExpectPass)
+        byte[] encoded = CavpKeyConfirmation.EncodeMacData(vector);
+        string description = vector.ErrorDescription ?? string.Empty;
+        if (description.Contains("MACData changed", StringComparison.OrdinalIgnoreCase))
         {
-            derivedKey.Should().Equal(vector.DKM, $"Derived key mismatch for {schemeName} vector {vector.Count}");
-
-            // TODO: Add MAC verification when CAVSTag is present in vector
-            if (vector.CAVSTag != null)
-            {
-                // Verify MAC tag computation using vector.CAVSTag
-            }
+            Assert.That(encoded, Is.Not.EqualTo(vector.MacData));
+            byte[] changedDataTag = CavpKeyConfirmation.GenerateTagOverEncodedData(vector, derivedKey, vector.MacData!);
+            Assert.That(changedDataTag, Is.Not.EqualTo(vector.CAVSTag));
+            return;
         }
+
+        Assert.That(encoded, Is.EqualTo(vector.MacData));
+        byte[] actualTag = CavpKeyConfirmation.GenerateProductionTag(vector, derivedKey);
+        if (description.Contains("Tag changed", StringComparison.OrdinalIgnoreCase))
+            Assert.That(actualTag, Is.Not.EqualTo(vector.CAVSTag));
+        else
+            Assert.That(actualTag, Is.EqualTo(vector.CAVSTag));
+    }
+
+    private static void ValidateSharedSecret(CavpTestVector vector, string schemeName, byte[] sharedSecret)
+    {
+        string description = vector.ErrorDescription ?? string.Empty;
+        if (description.Contains("Z changed", StringComparison.OrdinalIgnoreCase))
+            Assert.That(sharedSecret, Is.Not.EqualTo(vector.Z));
+        else if (vector.ExpectPass || !description.Contains("changed", StringComparison.OrdinalIgnoreCase))
+            Assert.That(sharedSecret, Is.EqualTo(vector.Z), $"Shared secret mismatch for {schemeName} vector {vector.Count}");
+    }
+
+    private static void ValidateDerivedKey(CavpTestVector vector, string schemeName, byte[] derivedKey)
+    {
+        string description = vector.ErrorDescription ?? string.Empty;
+        if (description.Contains("DKM changed", StringComparison.OrdinalIgnoreCase) ||
+            description.Contains("OI changed", StringComparison.OrdinalIgnoreCase))
+            Assert.That(derivedKey, Is.Not.EqualTo(vector.DKM));
+        else if (vector.ExpectPass || !description.Contains("changed", StringComparison.OrdinalIgnoreCase))
+            Assert.That(derivedKey, Is.EqualTo(vector.DKM), $"Derived key mismatch for {schemeName} vector {vector.Count}");
+    }
+
+    private static bool IsExpectedKeyRejection(CavpTestVector vector, Exception exception)
+    {
+        string description = vector.ErrorDescription ?? string.Empty;
+        bool keyMutation = description.Contains("public key", StringComparison.OrdinalIgnoreCase) ||
+            description.Contains("private key", StringComparison.OrdinalIgnoreCase) ||
+            description.Contains("prikey", StringComparison.OrdinalIgnoreCase);
+        return keyMutation && exception is ArgumentException or CryptographicException or InvalidOperationException;
     }
 
     /// <summary>
@@ -168,7 +198,7 @@ public class Sp80056ACavpVectorTests
     /// <param name="vector">The CAVP test vector containing key material and parameters</param>
     /// <param name="schemeName">The name of the key agreement scheme to test</param>
     /// <returns>The computed shared secret as a byte array</returns>
-    private static byte[] ComputeSharedSecretForScheme(CavpTestVector vector, string schemeName)
+    internal static byte[] ComputeSharedSecretForScheme(CavpTestVector vector, string schemeName)
     {
         var actualCurve = vector.Curve;
         if (string.IsNullOrEmpty(actualCurve))
