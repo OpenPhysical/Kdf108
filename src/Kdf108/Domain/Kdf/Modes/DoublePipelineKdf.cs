@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -139,28 +140,23 @@ public sealed class DoublePipelineKdf : IKdf
         IPrf prf = PrfFactory.Create(prfType);
         int outputSizeBits = prf.OutputSizeBits;
         int outputSizeBytes = outputSizeBits / 8;
-        long reps = (long)Math.Ceiling(outputLengthInBits / (double)outputSizeBits);
-
-        ValidateCounterAndOutputSize(reps, counterLengthBits, outputLengthInBits, useCounter);
+        var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, useCounter);
 
         // First pipeline: Generate A values
         IReadOnlyList<byte[]> aValues = GenerateAValues(kdk, prf, fixedInput, reps);
 
         // Second pipeline: Generate K values and combine them
-        byte[] resultBuffer = GenerateKValues(
-            kdk,
-            prf,
-            fixedInput,
-            aValues,
-            reps,
-            outputSizeBytes,
-            counterLengthBits,
-            counterLocation,
-            useCounter
-        );
-
-        // Truncate to requested length
-        return TruncateToRequestedLength(resultBuffer, outputLengthInBits);
+        try
+        {
+            byte[] resultBuffer = GenerateKValues(kdk, prf, fixedInput, aValues, reps, outputSizeBytes,
+                counterLengthBits, counterLocation, useCounter);
+            try { return TruncateToRequestedLength(resultBuffer, outputLengthInBits); }
+            finally { CryptographicOperations.ZeroMemory(resultBuffer); }
+        }
+        finally
+        {
+            for (int i = 1; i < aValues.Count; i++) CryptographicOperations.ZeroMemory(aValues[i]);
+        }
     }
 
     /// <summary>
@@ -240,7 +236,7 @@ public sealed class DoublePipelineKdf : IKdf
         CounterLocation counterLocation,
         bool useCounter)
     {
-        byte[] resultBuffer = new byte[reps * outputSizeBytes];
+        byte[] resultBuffer = new byte[checked((int)(reps * outputSizeBytes))];
         int offset = 0;
 
         for (uint i = 1; i <= reps; i++)
@@ -254,10 +250,14 @@ public sealed class DoublePipelineKdf : IKdf
                 useCounter
             );
 
-            byte[] block = prf.Compute(kdk, prfInput);
-
-            Buffer.BlockCopy(block, 0, resultBuffer, offset, outputSizeBytes);
-            offset += outputSizeBytes;
+            try
+            {
+                byte[] block = prf.Compute(kdk, prfInput);
+                try { Buffer.BlockCopy(block, 0, resultBuffer, offset, outputSizeBytes); }
+                finally { CryptographicOperations.ZeroMemory(block); }
+                offset += outputSizeBytes;
+            }
+            finally { CryptographicOperations.ZeroMemory(prfInput); }
         }
 
         return resultBuffer;

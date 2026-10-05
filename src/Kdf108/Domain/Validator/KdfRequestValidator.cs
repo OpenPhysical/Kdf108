@@ -38,6 +38,8 @@ public sealed class KdfRequestValidator : AbstractValidator<KdfRequest>
         RuleFor(static x => x.OutputLengthBits)
             .GreaterThan(0)
             .WithMessage("Output length must be greater than 0 bits.")
+            .LessThanOrEqualTo(uint.MaxValue)
+            .WithMessage("Output length must fit in the 32-bit [L] field.")
             .Must(static (request, length) => length <= request.Options.MaxBitsAllowed)
             .WithMessage(static req =>
                 $"Requested output length ({req.OutputLengthBits} bits) exceeds configured maximum ({req.Options.MaxBitsAllowed} bits).");
@@ -45,6 +47,10 @@ public sealed class KdfRequestValidator : AbstractValidator<KdfRequest>
         RuleFor(static x => x.Options)
             .NotNull()
             .WithMessage("Options must be provided.");
+
+        RuleFor(static x => x.Options.MaxBitsAllowed)
+            .GreaterThan(0)
+            .WithMessage("Maximum output length must be greater than 0 bits.");
 
         RuleFor(static x => x.Options.CounterLengthBits)
             .InclusiveBetween(1, 32)

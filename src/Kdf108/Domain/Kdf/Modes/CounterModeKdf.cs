@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -192,11 +193,10 @@ public sealed class CounterModeKdf : IKdf
         int outputSizeBits = prf.OutputSizeBits;
         int outputSizeBytes = outputSizeBits / 8;
 
-        long reps = (long)Math.Ceiling(outputLengthInBits / (double)outputSizeBits);
-        ValidateCounterSizeLimit(reps, counterLengthBits, outputLengthInBits);
-
-        return GenerateBlocks(kdk, reps, fixedInput, prf, counterLocation, counterLengthBits)
-            .Pipe(blocks => TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes));
+        var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, true);
+        var blocks = GenerateBlocks(kdk, reps, fixedInput, prf, counterLocation, counterLengthBits);
+        try { return TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes); }
+        finally { foreach (var block in blocks) CryptographicOperations.ZeroMemory(block); }
     }
 
     /// <summary>
@@ -242,16 +242,12 @@ public sealed class CounterModeKdf : IKdf
             .Select(i =>
             {
                 uint counter = (uint)i;
-                byte[] prfInput = CreatePrfInput(
-                    CreateCounter(counter, counterLengthBits),
-                    fixedInput,
-                    counterLocation,
-                    null
-                );
-
-                byte[] block = prf.Compute(kdk, prfInput);
-
-                return block;
+                byte[] counterBytes = CreateCounter(counter, counterLengthBits);
+                byte[] prfInput;
+                try { prfInput = CreatePrfInput(counterBytes, fixedInput, counterLocation, null); }
+                finally { CryptographicOperations.ZeroMemory(counterBytes); }
+                try { return prf.Compute(kdk, prfInput); }
+                finally { CryptographicOperations.ZeroMemory(prfInput); }
             });
     }
 
@@ -344,15 +340,15 @@ public sealed class CounterModeKdf : IKdf
         int outputSizeBits = prf.OutputSizeBits;
         int outputSizeBytes = outputSizeBits / 8;
 
-        long reps = (long)Math.Ceiling(outputLengthInBits / (double)outputSizeBits);
-        ValidateCounterSizeLimit(reps, counterLengthBits, outputLengthInBits);
+        var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, true);
 
         List<byte[]> blocks = Enumerable.Range(1, (int)reps)
             .Select(i => CreateSplitInputBlock(kdk, prf, dataBeforeCounter, CreateCounter((uint)i, counterLengthBits),
                 dataAfterCounter))
             .ToList();
 
-        return TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes);
+        try { return TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes); }
+        finally { foreach (var block in blocks) CryptographicOperations.ZeroMemory(block); }
     }
 
     /// <summary>
@@ -374,7 +370,9 @@ public sealed class CounterModeKdf : IKdf
         writer.Write(counter);
         writer.Write(after);
 
-        return prf.Compute(kdk, stream.ToArray());
+        byte[] input = stream.ToArray();
+        try { return prf.Compute(kdk, input); }
+        finally { CryptographicOperations.ZeroMemory(input); }
     }
 
     /// <summary>

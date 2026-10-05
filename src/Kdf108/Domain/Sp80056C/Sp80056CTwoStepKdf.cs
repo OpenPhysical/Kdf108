@@ -103,7 +103,7 @@ internal class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
                 KdfMode.DoublePipelineWithCounter => KeyExpansion.DoublePipelineMode(fixedInfo, outputLength, true, options.CounterLengthBits, options.CounterLocation),
                 _ => throw new ArgumentOutOfRangeException(nameof(options.KdfMode))
             };
-            var request = new TwoStepKdfRequest(
+            using var request = new TwoStepKdfRequest(
                 sharedSecret,
                 extraction,
                 SecurityStrength.Bits112,

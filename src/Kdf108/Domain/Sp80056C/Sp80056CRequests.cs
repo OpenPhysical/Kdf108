@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using Kdf108.Domain.Kdf;
 
 namespace Kdf108.Domain.Sp80056C;
@@ -60,9 +61,11 @@ public readonly record struct BitLength
 }
 
 /// <summary>The auxiliary function used by the SP 800-56C one-step method.</summary>
-public abstract class OneStepAuxiliaryFunction
+public abstract class OneStepAuxiliaryFunction : IDisposable
 {
     private OneStepAuxiliaryFunction() { }
+
+    public virtual void Dispose() { }
 
     public sealed class Hash : OneStepAuxiliaryFunction
     {
@@ -73,6 +76,7 @@ public abstract class OneStepAuxiliaryFunction
     public sealed class Hmac : OneStepAuxiliaryFunction
     {
         private readonly byte[]? _salt;
+        private bool _disposed;
 
         internal Hmac(NistHashAlgorithm algorithm, byte[]? salt)
         {
@@ -82,12 +86,14 @@ public abstract class OneStepAuxiliaryFunction
 
         public NistHashAlgorithm Algorithm { get; }
         public bool UsesDefaultSalt => _salt is null;
-        internal byte[]? CopySalt() => _salt?.ToArray();
+        internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
     }
 
     public sealed class Kmac : OneStepAuxiliaryFunction
     {
         private readonly byte[]? _salt;
+        private bool _disposed;
 
         internal Kmac(int strength, BitLength outputLength, byte[]? salt)
         {
@@ -99,7 +105,8 @@ public abstract class OneStepAuxiliaryFunction
         public int Strength { get; }
         public BitLength OutputLength { get; }
         public bool UsesDefaultSalt => _salt is null;
-        internal byte[]? CopySalt() => _salt?.ToArray();
+        internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
     }
 
     public static OneStepAuxiliaryFunction HashFunction(NistHashAlgorithm algorithm) => new Hash(algorithm);
@@ -128,10 +135,11 @@ public abstract class OneStepAuxiliaryFunction
 }
 
 /// <summary>Immutable input for the SP 800-56C Rev. 2 one-step method.</summary>
-public sealed class OneStepKdfRequest
+public sealed class OneStepKdfRequest : IDisposable
 {
     private readonly byte[] _sharedSecret;
     private readonly byte[] _fixedInfo;
+    private bool _disposed;
 
     public OneStepKdfRequest(
         ReadOnlySpan<byte> sharedSecret,
@@ -162,8 +170,18 @@ public sealed class OneStepKdfRequest
     public BitLength OutputLength { get; }
     public SecurityStrength SecurityStrength { get; }
     public OneStepAuxiliaryFunction AuxiliaryFunction { get; }
-    internal byte[] CopySharedSecret() => _sharedSecret.ToArray();
-    internal byte[] CopyFixedInfo() => _fixedInfo.ToArray();
+    internal byte[] CopySharedSecret() { ThrowIfDisposed(); return _sharedSecret.ToArray(); }
+    internal byte[] CopyFixedInfo() { ThrowIfDisposed(); return _fixedInfo.ToArray(); }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        CryptographicOperations.ZeroMemory(_sharedSecret);
+        AuxiliaryFunction.Dispose();
+        _disposed = true;
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private static void ValidateStrength(OneStepAuxiliaryFunction function, SecurityStrength strength)
     {
@@ -182,24 +200,30 @@ public sealed class OneStepKdfRequest
 }
 
 /// <summary>The permitted extraction choices for the two-step method.</summary>
-public abstract class TwoStepExtraction
+public abstract class TwoStepExtraction : IDisposable
 {
     private TwoStepExtraction() { }
+
+    public abstract void Dispose();
 
     public sealed class Hmac : TwoStepExtraction
     {
         private readonly byte[]? _salt;
+        private bool _disposed;
         internal Hmac(NistHashAlgorithm algorithm, byte[]? salt) { Algorithm = algorithm; _salt = salt?.ToArray(); }
         public NistHashAlgorithm Algorithm { get; }
-        internal byte[]? CopySalt() => _salt?.ToArray();
+        internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
     }
 
     public sealed class AesCmac : TwoStepExtraction
     {
         private readonly byte[]? _salt;
+        private bool _disposed;
         internal AesCmac(int keyBits, byte[]? salt) { KeyBits = keyBits; _salt = salt?.ToArray(); }
         public int KeyBits { get; }
-        internal byte[]? CopySalt() => _salt?.ToArray();
+        internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
     }
 
     public static TwoStepExtraction HmacFunction(NistHashAlgorithm algorithm, ReadOnlySpan<byte> salt = default)
@@ -269,10 +293,11 @@ public abstract class KeyExpansion
 }
 
 /// <summary>Immutable input for SP 800-56C Rev. 2 two-step derivation.</summary>
-public sealed class TwoStepKdfRequest
+public sealed class TwoStepKdfRequest : IDisposable
 {
     private readonly byte[] _sharedSecret;
     private readonly KeyExpansion[] _expansions;
+    private bool _disposed;
 
     public TwoStepKdfRequest(ReadOnlySpan<byte> sharedSecret, TwoStepExtraction extraction, SecurityStrength securityStrength, IEnumerable<KeyExpansion> expansions)
     {
@@ -306,7 +331,17 @@ public sealed class TwoStepKdfRequest
     public TwoStepExtraction Extraction { get; }
     public SecurityStrength SecurityStrength { get; }
     public IReadOnlyList<KeyExpansion> Expansions => Array.AsReadOnly(_expansions);
-    internal byte[] CopySharedSecret() => _sharedSecret.ToArray();
+    internal byte[] CopySharedSecret() { ThrowIfDisposed(); return _sharedSecret.ToArray(); }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        CryptographicOperations.ZeroMemory(_sharedSecret);
+        Extraction.Dispose();
+        _disposed = true;
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }
 
 internal static class Sp80056CAlgorithmInfo

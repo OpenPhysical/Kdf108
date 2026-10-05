@@ -93,7 +93,7 @@ internal class Sp80056COneStepKdf : ISp80056CKeyDerivationPipeline
             var auxiliary = OneStepAuxiliaryFunction.HmacFunction(
                 ToHashAlgorithm(options.ExpansionPrfType),
                 options.Salt ?? Array.Empty<byte>());
-            var request = new OneStepKdfRequest(
+            using var request = new OneStepKdfRequest(
                 sharedSecret,
                 fixedInfo,
                 BitLength.Create(options.OutputLengthInBits),

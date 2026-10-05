@@ -3,6 +3,7 @@
 
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -173,13 +174,10 @@ public sealed class FeedbackModeKdf : IKdf
         int outputSizeBits = prf.OutputSizeBits;
         int outputSizeBytes = outputSizeBits / 8;
 
-        long reps = (long)Math.Ceiling(outputLengthInBits / (double)outputSizeBits);
-
-        ValidateCounterAndOutputSize(reps, counterLengthBits, outputLengthInBits, useCounter);
-
-        return GenerateBlocks(kdk, fixedInput, iv, reps, prf, outputSizeBytes, counterLengthBits, counterLocation,
-                useCounter)
-            .Pipe(resultBuffer => TruncateToRequestedLength(resultBuffer, outputLengthInBits));
+        var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, useCounter);
+        byte[] resultBuffer = GenerateBlocks(kdk, fixedInput, iv, reps, prf, outputSizeBytes, counterLengthBits, counterLocation, useCounter);
+        try { return TruncateToRequestedLength(resultBuffer, outputLengthInBits); }
+        finally { CryptographicOperations.ZeroMemory(resultBuffer); }
     }
 
     /// <summary>
@@ -241,20 +239,27 @@ public sealed class FeedbackModeKdf : IKdf
         CounterLocation counterLocation,
         bool useCounter)
     {
-        byte[] resultBuffer = new byte[reps * outputSizeBytes];
+        byte[] resultBuffer = new byte[checked((int)(reps * outputSizeBytes))];
         int offset = 0;
-        byte[] currentK = iv;
+        byte[] currentK = (byte[])iv.Clone();
 
-        for (uint i = 1; i <= reps; i++)
+        try
         {
-            byte[] prfInput = CreatePrfInput(currentK, fixedInput, i, counterLengthBits, counterLocation, useCounter);
-            currentK = prf.Compute(kdk, prfInput);
-
-            Buffer.BlockCopy(currentK, 0, resultBuffer, offset, outputSizeBytes);
-            offset += outputSizeBytes;
+            for (uint i = 1; i <= reps; i++)
+            {
+                byte[] prfInput = CreatePrfInput(currentK, fixedInput, i, counterLengthBits, counterLocation, useCounter);
+                byte[] nextK;
+                try { nextK = prf.Compute(kdk, prfInput); }
+                finally { CryptographicOperations.ZeroMemory(prfInput); }
+                CryptographicOperations.ZeroMemory(currentK);
+                currentK = nextK;
+                Buffer.BlockCopy(currentK, 0, resultBuffer, offset, outputSizeBytes);
+                offset += outputSizeBytes;
+            }
+            return resultBuffer;
         }
-
-        return resultBuffer;
+        catch { CryptographicOperations.ZeroMemory(resultBuffer); throw; }
+        finally { CryptographicOperations.ZeroMemory(currentK); }
     }
 
     /// <summary>

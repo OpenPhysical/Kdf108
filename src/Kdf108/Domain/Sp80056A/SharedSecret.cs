@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
-using System.Linq;
+using System.Security.Cryptography;
 
 namespace Kdf108.Domain.Sp80056A;
 
 /// <summary>
 /// Represents an immutable shared secret resulting from a key agreement operation.
 /// </summary>
-public sealed class SharedSecret : IEquatable<SharedSecret>
+public sealed class SharedSecret : IEquatable<SharedSecret>, IDisposable
 {
     private readonly byte[] _value;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SharedSecret"/> class.
@@ -35,6 +36,7 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
     /// <returns>A copy of the shared secret bytes.</returns>
     public byte[] ToArray()
     {
+        ThrowIfDisposed();
         var result = new byte[_value.Length];
         Array.Copy(_value, result, _value.Length);
         return result;
@@ -44,12 +46,23 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
     /// Gets the shared secret value as a read-only span for zero-copy scenarios.
     /// </summary>
     /// <returns>A read-only span over the shared secret bytes.</returns>
-    public ReadOnlySpan<byte> AsSpan() => _value.AsSpan();
+    public ReadOnlySpan<byte> AsSpan()
+    {
+        ThrowIfDisposed();
+        return _value.AsSpan();
+    }
 
     /// <summary>
     /// Gets the length of the shared secret in bytes.
     /// </summary>
-    public int Length => _value.Length;
+    public int Length
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _value.Length;
+        }
+    }
 
     /// <summary>
     /// Concatenates two shared secrets.
@@ -66,7 +79,14 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
         first.AsSpan().CopyTo(combined.AsSpan(0, first.Length));
         second.AsSpan().CopyTo(combined.AsSpan(first.Length, second.Length));
         
-        return new SharedSecret(combined);
+        try
+        {
+            return new SharedSecret(combined);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(combined);
+        }
     }
 
     /// <summary>
@@ -76,10 +96,12 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
     /// <returns>true if the specified shared secret is equal to the current shared secret; otherwise, false.</returns>
     public bool Equals(SharedSecret? other)
     {
+        ThrowIfDisposed();
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
-        
-        return _value.SequenceEqual(other._value);
+
+        other.ThrowIfDisposed();
+        return CryptographicOperations.FixedTimeEquals(_value, other._value);
     }
 
     /// <summary>
@@ -95,6 +117,7 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
     /// <returns>A hash code for the current shared secret.</returns>
     public override int GetHashCode()
     {
+        ThrowIfDisposed();
         // Simple hash combining first few bytes and length
         var hash = new HashCode();
         hash.Add(_value.Length);
@@ -114,5 +137,15 @@ public sealed class SharedSecret : IEquatable<SharedSecret>
     /// Note: Does not expose the actual secret value for security.
     /// </summary>
     /// <returns>A string representation of this shared secret.</returns>
-    public override string ToString() => $"SharedSecret[{_value.Length} bytes]";
+    public override string ToString() => _disposed ? "SharedSecret[disposed]" : $"SharedSecret[{_value.Length} bytes]";
+
+    /// <summary>Erases the owned copy of the shared secret and prevents further use.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        CryptographicOperations.ZeroMemory(_value);
+        _disposed = true;
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }
