@@ -1,0 +1,74 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "./src",
+          "files": [
+            "**/*.csproj"
+          ],
+          "exclude": [
+            "**/bin/**",
+            "**/obj/**"
+          ]
+        }
+      ],
+      "dest": "docs/api",
+      "disableGitFeatures": false,
+      "disableDefaultFilter": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "docs/api/**.yml"
+        ]
+      },
+      {
+        "files": [
+          "index.md",
+          "toc.yml",
+          "docs/**.md",
+          "docs/toc.yml"
+        ],
+        "exclude": [
+          "docs/api/**"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "docs/images/**"
+        ]
+      }
+    ],
+    "output": "_site",
+    "globalMetadataFiles": [],
+    "fileMetadataFiles": [],
+    "template": [
+      "default",
+      "modern"
+    ],
+    "postProcessors": [
+      "ExtractSearchIndex"
+    ],
+    "markdownEngineName": "markdig",
+    "noLangKeyword": false,
+    "keepFileLink": false,
+    "cleanupCacheHistory": false,
+    "disableGitFeatures": false,
+    "globalMetadata": {
+      "_appTitle": "Kdf108",
+      "_appName": "Kdf108",
+      "_appFooter": "Kdf108 Cryptographic Library",
+      "_enableSearch": true,
+      "_gitContribute": {
+        "repo": "https://github.com/OpenPhysical/Kdf108",
+        "branch": "master"
+      },
+      "_baseUrl": "https://openphysical.github.io/Kdf108/"
+    }
+  }
+}

@@ -5,30 +5,12 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  schedule:
+    - cron: '23 8 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-      - run: dotnet restore
-      - run: dotnet build --no-restore --configuration Release
-      - run: dotnet test --no-build --configuration Release
-      - run: dotnet pack src/Kdf108/Kdf108.csproj --no-build --configuration Release --output artifacts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: packages-${{ matrix.os }}
-          path: artifacts/*.*nupkg
+  conformance:
+    uses: ./.github/workflows/conformance.yml

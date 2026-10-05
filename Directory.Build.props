@@ -8,15 +8,14 @@
     <PackageProjectUrl>https://github.com/OpenPhysical/Kdf108</PackageProjectUrl>
     <RepositoryUrl>https://github.com/OpenPhysical/Kdf108</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>KDF;NIST;SP800-108;KeyDerivation;Crypto;C#</PackageTags>
-    <Description>.NET implementation of NIST SP 800-108 KDF with support for Feedback, Counter, and Double-Pipeline modes.</Description>
-    <PackageReleaseNotes>OpenPhysical AGPL v3 release with .NET 8, .NET 10, and .NET Standard 2.0 support.</PackageReleaseNotes>
+    <PackageTags>KDF;NIST;SP800-108;SP800-56A;SP800-56C;ECDH;KeyDerivation;Crypto;C#</PackageTags>
+    <Description>.NET implementation of NIST SP 800-108 KDF with SP 800-56A key agreement and SP 800-56C Rev. 2 derivation methods.</Description>
+    <PackageReleaseNotes>Version 3.0 is a new, unified API for SP 800-108, SP 800-56A, and SP 800-56C, with dependency-injection services and full NIST CAVP coverage. See CHANGELOG.md and docs/migration-v3.md.</PackageReleaseNotes>
     <PackageIcon>logo_64x64.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <!-- Build options -->
-    <Version>2.0.0</Version>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>3.0.0</Version>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

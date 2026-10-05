@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain `dotnet test` runs the fast lane. CAVP gates pass their own explicit filter, which replaces this one. -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>TestCategory!=CAVP</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>
