@@ -373,6 +373,37 @@ public class CavpTestVector
         Regex.Match(Result ?? string.Empty, @"^[PF]\s*\((\d+)\s*-").Groups[1].Value,
         CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Describes which IUT result the CAVP validity test changed. The vector fields remain
+    /// the reference inputs and outputs, including CAVSTag for a "Tag changed" result.
+    /// </summary>
+    public CavpResultEffect ResultEffect
+    {
+        get
+        {
+            string description = ErrorDescription ?? string.Empty;
+            if (ExpectPass)
+            {
+                if (description.Contains("Z value should have leading 0 nibble", StringComparison.OrdinalIgnoreCase))
+                    return CavpResultEffect.LeadingZeroZ;
+                if (description.Contains("DKM value should have leading 0 nibble", StringComparison.OrdinalIgnoreCase))
+                    return CavpResultEffect.LeadingZeroDkm;
+                return CavpResultEffect.Correct;
+            }
+
+            if (description.Contains("public key", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("private key", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("prikey", StringComparison.OrdinalIgnoreCase))
+                return CavpResultEffect.KeyRejected;
+            if (description.Contains("Z changed", StringComparison.OrdinalIgnoreCase)) return CavpResultEffect.ZMismatch;
+            if (description.Contains("DKM changed", StringComparison.OrdinalIgnoreCase)) return CavpResultEffect.DkmMismatch;
+            if (description.Contains("OI changed", StringComparison.OrdinalIgnoreCase)) return CavpResultEffect.OiMismatch;
+            if (description.Contains("MACData changed", StringComparison.OrdinalIgnoreCase)) return CavpResultEffect.MacDataMismatch;
+            if (description.Contains("Tag changed", StringComparison.OrdinalIgnoreCase)) return CavpResultEffect.TagMismatch;
+            throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has unknown result semantics: '{Result}'.");
+        }
+    }
+
     internal void ValidateMetadata()
     {
         if (!Count.HasValue)
@@ -387,6 +418,7 @@ public class CavpTestVector
             throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has unknown passing result code {ResultCode}.");
         if (ExpectFail && ResultCode is < 1 or > 12)
             throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has unknown failing result code {ResultCode}.");
+        _ = ResultEffect;
     }
     
     /// <summary>
@@ -424,6 +456,18 @@ public class CavpTestVector
 
 public enum CavpFamily { Ecc, Ffc, Unknown }
 public enum CavpStage { Zz, KdfNoKeyConfirmation, KeyConfirmation, Unknown }
+public enum CavpResultEffect
+{
+    Correct,
+    KeyRejected,
+    ZMismatch,
+    DkmMismatch,
+    OiMismatch,
+    MacDataMismatch,
+    TagMismatch,
+    LeadingZeroZ,
+    LeadingZeroDkm
+}
 
 public sealed record CavpSourceMetadata(
     string FilePath,

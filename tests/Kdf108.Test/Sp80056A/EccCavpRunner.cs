@@ -31,7 +31,9 @@ internal static class EccCavpRunner
                 Public(vector.QeCAVSx, vector.QeCAVSy, curve, vector, "CAVS ephemeral")),
 
             "ECC One Pass Unified Scheme" or "ECC OnePass Unified Scheme" => OnePassUnified(vector, curve),
-            "ECC One Pass DH Scheme" => OnePassDh(vector, curve),
+            // The no-key-confirmation corpus uses an inconsistent directory name,
+            // but its header and key fields identify the primitive as dhOnePassDH.
+            "ECC One Pass DH Scheme" or "ECC OnePassDH Unified Scheme" => OnePassDh(vector, curve),
 
             "ECC Full MQV Scheme" => EcMqvKeyAgreement.ComputeFullMqv(
                 Pair(vector.DsIUT, vector.QsIUTx, vector.QsIUTy, curve, vector, "IUT static"),

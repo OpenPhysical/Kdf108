@@ -62,6 +62,22 @@ public class CavpTestVectorParserTests
         Assert.That(CavpKeyConfirmation.GenerateProductionTag(vector, vector.DKM!), Is.EqualTo(vector.CAVSTag));
     }
 
+    [Test]
+    public void EveryKeyConfirmationFile_RepresentativePositiveVectorEncodesMacData()
+    {
+        foreach (string file in Directory.EnumerateFiles(GetVectorRoot(), "*.fax", SearchOption.AllDirectories))
+        {
+            CavpTestVector? vector = CavpTestVectorParser.ParseFile(file)
+                .FirstOrDefault(candidate => candidate.Source.Stage == CavpStage.KeyConfirmation && candidate.ExpectPass);
+            if (vector is null) continue;
+
+            byte[] encoded;
+            try { encoded = CavpKeyConfirmation.EncodeMacData(vector); }
+            catch (System.Exception exception) { Assert.Fail($"{file}: {exception.Message}"); return; }
+            Assert.That(encoded, Is.EqualTo(vector.MacData), file);
+        }
+    }
+
     [TestCase(CavpFamily.Ecc, CavpStage.Zz)]
     [TestCase(CavpFamily.Ecc, CavpStage.KdfNoKeyConfirmation)]
     [TestCase(CavpFamily.Ecc, CavpStage.KeyConfirmation)]
@@ -75,6 +91,18 @@ public class CavpTestVectorParserTests
                 Path.Combine(GetVectorRoot(), familyDirectory), "*.fax", SearchOption.AllDirectories)
             .SelectMany(CavpTestVectorParser.ParseFile)
             .First(candidate => candidate.Source.Stage == stage && candidate.ExpectPass);
+
+        Sp80056AStrictCavpTests.Validate(vector);
+    }
+
+    [Test]
+    public void FfcChangedTagVector_RejectsCorpusTag()
+    {
+        CavpTestVector vector = Directory.EnumerateFiles(
+                Path.Combine(GetVectorRoot(), "KASTestVectorsFFC2016", "Key Confirmation"),
+                "*.fax", SearchOption.AllDirectories)
+            .SelectMany(CavpTestVectorParser.ParseFile)
+            .First(candidate => candidate.ResultEffect == CavpResultEffect.TagMismatch);
 
         Sp80056AStrictCavpTests.Validate(vector);
     }

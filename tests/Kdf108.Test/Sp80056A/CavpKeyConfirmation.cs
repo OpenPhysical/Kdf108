@@ -9,6 +9,7 @@ using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Utilities;
 
 namespace Kdf108.Test.Sp80056A;
 
@@ -24,6 +25,20 @@ internal static class CavpKeyConfirmation
             return GenerateLegacyCcmTag(vector, key, EncodeMacData(vector));
         return Sp80056AKeyConfirmation.GenerateTag(
             key, CreateContext(vector), algorithm, BitLength.Create(vector.CAVSTag.Length * 8L), SecurityStrength.Bits112);
+    }
+
+    internal static bool VerifyProductionTag(CavpTestVector vector, byte[] key, byte[] expectedTag)
+    {
+        var algorithm = CreateProductionAlgorithm(vector);
+        if (algorithm is not null)
+        {
+            return Sp80056AKeyConfirmation.VerifyTag(
+                expectedTag, key, CreateContext(vector), algorithm,
+                BitLength.Create(expectedTag.Length * 8L), SecurityStrength.Bits112);
+        }
+
+        byte[] actual = GenerateLegacyCcmTag(vector, key, EncodeMacData(vector));
+        return Arrays.FixedTimeEquals(expectedTag, actual);
     }
 
     internal static byte[] GenerateTagOverEncodedData(CavpTestVector vector, byte[] key, byte[] encodedData)
@@ -50,15 +65,15 @@ internal static class CavpKeyConfirmation
         bool bilateral = name.Contains("_blat", StringComparison.Ordinal);
         byte[] iutId = Convert.FromHexString("a1b2c3d4e5");
         byte[] cavsId = "CAVSid"u8.ToArray();
-        byte[] iutNonce = GetFirstHex(vector, "NonceDKMIUT", "NonceEphemIUT", "YephemIUT");
-        byte[] cavsNonce = GetFirstHex(vector, "NonceEphemCAVS", "NonceDKMCAVS", "YephemCAVS");
+        byte[] iutEphemeralData = GetEphemeralData(vector, "IUT");
+        byte[] cavsEphemeralData = GetEphemeralData(vector, "CAVS");
         return new KeyConfirmationContext(
             bilateral ? KeyConfirmationMode.Bilateral : KeyConfirmationMode.Unilateral,
             iutProvides == iutIsU ? KeyConfirmationParty.PartyU : KeyConfirmationParty.PartyV,
             iutIsU ? iutId : cavsId,
             iutIsU ? cavsId : iutId,
-            iutIsU ? iutNonce : cavsNonce,
-            iutIsU ? cavsNonce : iutNonce);
+            iutIsU ? iutEphemeralData : cavsEphemeralData,
+            iutIsU ? cavsEphemeralData : iutEphemeralData);
     }
 
     private static KeyConfirmationAlgorithm? CreateProductionAlgorithm(CavpTestVector vector)
@@ -103,11 +118,22 @@ internal static class CavpKeyConfirmation
             ? Convert.FromHexString(value)
             : throw new InvalidOperationException($"Vector {vector.Count} is missing {name}.");
 
-    private static byte[] GetFirstHex(CavpTestVector vector, params string[] names)
+    private static byte[] GetEphemeralData(CavpTestVector vector, string party)
     {
-        foreach (string name in names)
+        // EphemData is the party's ephemeral public key when the scheme has one.
+        // Otherwise CAVS supplies the nonce that substitutes for that public key.
+        string xName = $"Qe{party}x";
+        string yName = $"Qe{party}y";
+        if (vector.Fields.TryGetValue(xName, out string? x) &&
+            vector.Fields.TryGetValue(yName, out string? y))
+            return Convert.FromHexString(x + y);
+
+        foreach (string name in new[] { $"Yephem{party}", $"NonceEphem{party}", $"NonceDKM{party}" })
             if (vector.Fields.TryGetValue(name, out string? value))
                 return Convert.FromHexString(value);
-        throw new InvalidOperationException($"Vector {vector.Count} is missing all required alternatives: {string.Join(", ", names)}.");
+
+        // A party in a static or one-flow scheme may contribute neither an
+        // ephemeral public key nor a replacement nonce. Its EphemData is empty.
+        return Array.Empty<byte>();
     }
 }

@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using Kdf108.Domain.Sp80056A;
 using Kdf108.Exceptions;
 
@@ -71,10 +70,9 @@ public class Sp80056AStrictCavpTests
         catch (AssertionException) { throw; }
         catch (Exception ex) when (IsExpectedKeyRejection(vector, ex)) { return; }
 
-        string description = vector.ErrorDescription ?? string.Empty;
-        if (IsKeyMutation(description))
+        if (vector.ResultEffect == CavpResultEffect.KeyRejected)
             Assert.Fail($"Vector {vector.Count} expected key rejection but key agreement completed.");
-        if (description.Contains("Z changed", StringComparison.OrdinalIgnoreCase))
+        if (vector.ResultEffect == CavpResultEffect.ZMismatch)
         {
             Assert.That(z, Is.Not.EqualTo(vector.Z));
             return;
@@ -86,8 +84,7 @@ public class Sp80056AStrictCavpTests
         Assert.That(vector.DKM, Is.Not.Null);
         Assert.That(vector.Hash, Is.Not.Null.And.Not.Empty);
         byte[] dkm = Sp80056AConcatKdf.DeriveKeyMaterial(z, vector.OI!, vector.DKM!.Length, vector.Hash!);
-        if (description.Contains("DKM changed", StringComparison.OrdinalIgnoreCase) ||
-            description.Contains("OI changed", StringComparison.OrdinalIgnoreCase))
+        if (vector.ResultEffect is CavpResultEffect.DkmMismatch or CavpResultEffect.OiMismatch)
         {
             Assert.That(dkm, Is.Not.EqualTo(vector.DKM));
             return;
@@ -98,29 +95,35 @@ public class Sp80056AStrictCavpTests
         Assert.That(vector.MacData, Is.Not.Null);
         Assert.That(vector.CAVSTag, Is.Not.Null);
         byte[] encoded = CavpKeyConfirmation.EncodeMacData(vector);
-        if (description.Contains("MACData changed", StringComparison.OrdinalIgnoreCase))
+        if (vector.ResultEffect == CavpResultEffect.MacDataMismatch)
         {
             Assert.That(encoded, Is.Not.EqualTo(vector.MacData));
             Assert.That(CavpKeyConfirmation.GenerateTagOverEncodedData(vector, dkm, vector.MacData!),
-                Is.Not.EqualTo(vector.CAVSTag));
+                Is.EqualTo(vector.CAVSTag), "CAVSTag authenticates the unmodified reference MacData.");
+            Assert.That(CavpKeyConfirmation.GenerateProductionTag(vector, dkm),
+                Is.Not.EqualTo(vector.CAVSTag), "The changed IUT MacData must not reproduce the reference tag.");
             return;
         }
         Assert.That(encoded, Is.EqualTo(vector.MacData));
         byte[] tag = CavpKeyConfirmation.GenerateProductionTag(vector, dkm);
-        Assert.That(tag, description.Contains("Tag changed", StringComparison.OrdinalIgnoreCase)
-            ? Is.Not.EqualTo(vector.CAVSTag)
-            : Is.EqualTo(vector.CAVSTag));
+        if (vector.ResultEffect == CavpResultEffect.TagMismatch)
+        {
+            Assert.That(tag, Is.Not.EqualTo(vector.CAVSTag),
+                "The corpus tag marked as changed must differ from the production tag.");
+            Assert.That(CavpKeyConfirmation.VerifyProductionTag(vector, dkm, vector.CAVSTag!), Is.False,
+                "A changed CAVP tag must fail key-confirmation verification.");
+        }
+        else
+        {
+            Assert.That(tag, Is.EqualTo(vector.CAVSTag));
+            Assert.That(CavpKeyConfirmation.VerifyProductionTag(vector, dkm, vector.CAVSTag!), Is.True);
+        }
     }
 
     private static bool IsExpectedKeyRejection(CavpTestVector vector, Exception exception) =>
-        IsKeyMutation(vector.ErrorDescription ?? string.Empty) &&
-        exception is ArgumentException or System.Security.Cryptography.CryptographicException or InvalidOperationException or
+        vector.ResultEffect == CavpResultEffect.KeyRejected &&
+        exception is ArgumentException or InvalidOperationException or
             Kdf108.Exceptions.CryptographicException or Sp80056AKeyAgreementException;
-
-    private static bool IsKeyMutation(string description) =>
-        description.Contains("public key", StringComparison.OrdinalIgnoreCase) ||
-        description.Contains("private key", StringComparison.OrdinalIgnoreCase) ||
-        description.Contains("prikey", StringComparison.OrdinalIgnoreCase);
 
     private static string GetVectorRoot()
     {
