@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
-using System.Security.Cryptography;
+using Kdf108.Internal;
+using Org.BouncyCastle.Utilities;
 
 namespace Kdf108.Domain.Sp80056A;
 
@@ -85,7 +86,7 @@ public sealed class SharedSecret : IEquatable<SharedSecret>, IDisposable
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(combined);
+            SecureMemory.Clear(combined);
         }
     }
 
@@ -101,7 +102,7 @@ public sealed class SharedSecret : IEquatable<SharedSecret>, IDisposable
         if (ReferenceEquals(this, other)) return true;
 
         other.ThrowIfDisposed();
-        return CryptographicOperations.FixedTimeEquals(_value, other._value);
+        return Arrays.FixedTimeEquals(_value, other._value);
     }
 
     /// <summary>
@@ -143,7 +144,7 @@ public sealed class SharedSecret : IEquatable<SharedSecret>, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        CryptographicOperations.ZeroMemory(_value);
+        SecureMemory.Clear(_value);
         _disposed = true;
     }
 

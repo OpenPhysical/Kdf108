@@ -43,10 +43,10 @@ public class Sp80056APublicKeyValidatorTests
 
     [Test]
     [Category("InputValidation")]
-    public void Validate_NullPublicKey_FailsValidation()
+    public void Validate_NullPublicKey_ThrowsInvalidOperationException()
     {
         // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _validator.Validate((Sp80056APublicKey)null!));
+        Assert.Throws<InvalidOperationException>(() => _validator.Validate((Sp80056APublicKey)null!));
     }
 
     [Test]
@@ -167,10 +167,10 @@ public class Sp80056APublicKeyValidatorTests
     }
 
     [Test]
-    public void ValidateAndThrow_InvalidKey_ThrowsValidationException()
+    public void ValidateAndThrow_NullKey_ThrowsInvalidOperationException()
     {
         // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _validator.ValidateAndThrow((Sp80056APublicKey)null!));
+        Assert.Throws<InvalidOperationException>(() => _validator.ValidateAndThrow((Sp80056APublicKey)null!));
     }
 
     [Test]

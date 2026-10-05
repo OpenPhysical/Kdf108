@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
-using System.Security.Cryptography;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Macs;
+using Org.BouncyCastle.Crypto.Parameters;
 
 namespace Kdf108.Domain.Sp80056C;
 
@@ -28,7 +30,7 @@ public static class Sp80056CHmacKdf
     /// key usage information, and other context-specific data.
     /// </param>
     /// <param name="outputLengthBytes">The desired length of the derived key material in bytes.</param>
-    /// <param name="hmacAlgorithm">The HMAC algorithm to use for the KDF.</param>
+    /// <param name="hmacAlgorithm">The Bouncy Castle HMAC implementation to use for the KDF.</param>
     /// <param name="salt">
     /// Optional salt value. If null, a zero-filled salt of appropriate length is used.
     /// </param>
@@ -43,7 +45,7 @@ public static class Sp80056CHmacKdf
         byte[] sharedSecret, 
         byte[] otherInfo, 
         int outputLengthBytes, 
-        HMAC hmacAlgorithm,
+        IMac hmacAlgorithm,
         byte[]? salt = null)
     {
         if (sharedSecret == null)
@@ -58,13 +60,12 @@ public static class Sp80056CHmacKdf
         // If no salt provided, use zeros (as per SP 800-56C)
         if (salt == null)
         {
-            salt = new byte[hmacAlgorithm.HashSize / 8];
+            salt = new byte[hmacAlgorithm.GetMacSize()];
         }
 
-        // Set the HMAC key
-        hmacAlgorithm.Key = salt;
+        hmacAlgorithm.Init(new KeyParameter(salt));
 
-        var hmacLengthBytes = hmacAlgorithm.HashSize / 8;
+        var hmacLengthBytes = hmacAlgorithm.GetMacSize();
         var iterations = (int)Math.Ceiling((double)outputLengthBytes / hmacLengthBytes);
 
         var result = new byte[outputLengthBytes];
@@ -83,7 +84,9 @@ public static class Sp80056CHmacKdf
             Array.Copy(sharedSecret, 0, inputData, counter.Length, sharedSecret.Length);
             Array.Copy(otherInfo, 0, inputData, counter.Length + sharedSecret.Length, otherInfo.Length);
 
-            var hmacOutput = hmacAlgorithm.ComputeHash(inputData);
+            hmacAlgorithm.BlockUpdate(inputData, 0, inputData.Length);
+            var hmacOutput = new byte[hmacLengthBytes];
+            hmacAlgorithm.DoFinal(hmacOutput, 0);
 
             var bytesToCopy = Math.Min(hmacOutput.Length, outputLengthBytes - offset);
             Array.Copy(hmacOutput, 0, result, offset, bytesToCopy);
@@ -115,7 +118,7 @@ public static class Sp80056CHmacKdf
         string hmacAlgorithmName,
         byte[]? salt = null)
     {
-        using var hmacAlgorithm = CreateHmacAlgorithm(hmacAlgorithmName);
+        var hmacAlgorithm = CreateHmacAlgorithm(hmacAlgorithmName);
         return DeriveKeyMaterial(sharedSecret, otherInfo, outputLengthBytes, hmacAlgorithm, salt);
     }
 
@@ -123,20 +126,16 @@ public static class Sp80056CHmacKdf
     /// Creates an HMAC algorithm instance based on the specified algorithm name.
     /// </summary>
     /// <param name="hmacAlgorithmName">The name of the HMAC algorithm.</param>
-    /// <returns>An HMAC instance for the specified algorithm.</returns>
+    /// <returns>A Bouncy Castle HMAC instance for the specified algorithm.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm name is specified.</exception>
-    private static HMAC CreateHmacAlgorithm(string hmacAlgorithmName)
+    private static IMac CreateHmacAlgorithm(string hmacAlgorithmName)
     {
         return hmacAlgorithmName?.ToUpperInvariant() switch
         {
-            "HMAC-SHA1" => new HMACSHA1(),
-            "HMACSHA1" => new HMACSHA1(),
-            "HMAC-SHA256" => new HMACSHA256(),
-            "HMACSHA256" => new HMACSHA256(),
-            "HMAC-SHA384" => new HMACSHA384(),
-            "HMACSHA384" => new HMACSHA384(),
-            "HMAC-SHA512" => new HMACSHA512(),
-            "HMACSHA512" => new HMACSHA512(),
+            "HMAC-SHA1" or "HMACSHA1" => new HMac(Sp80056COneStep.CreateDigest(NistHashAlgorithm.Sha1)),
+            "HMAC-SHA256" or "HMACSHA256" => new HMac(Sp80056COneStep.CreateDigest(NistHashAlgorithm.Sha256)),
+            "HMAC-SHA384" or "HMACSHA384" => new HMac(Sp80056COneStep.CreateDigest(NistHashAlgorithm.Sha384)),
+            "HMAC-SHA512" or "HMACSHA512" => new HMac(Sp80056COneStep.CreateDigest(NistHashAlgorithm.Sha512)),
             _ => throw new ArgumentException($"Unsupported HMAC algorithm: {hmacAlgorithmName}", nameof(hmacAlgorithmName))
         };
     }

@@ -4,12 +4,13 @@
 #pragma warning disable CS1591
 
 using System;
-using System.Security.Cryptography;
 using System.Text;
 using Kdf108.Domain.Sp80056C;
+using Kdf108.Internal;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Utilities;
 
 namespace Kdf108.Domain.Sp80056A;
 
@@ -155,20 +156,20 @@ public static class Sp80056AKeyConfirmation
                 if (remainder != 0) tag[^1] &= (byte)(0xFF << (8 - remainder));
                 return tag;
             }
-            finally { CryptographicOperations.ZeroMemory(fullTag); }
+            finally { SecureMemory.Clear(fullTag); }
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(key);
-            CryptographicOperations.ZeroMemory(data);
+            SecureMemory.Clear(key);
+            SecureMemory.Clear(data);
         }
     }
 
     public static bool VerifyTag(ReadOnlySpan<byte> expectedTag, ReadOnlySpan<byte> macKey, KeyConfirmationContext context, KeyConfirmationAlgorithm algorithm, BitLength tagLength, SecurityStrength securityStrength)
     {
         var actual = GenerateTag(macKey, context, algorithm, tagLength, securityStrength);
-        try { return CryptographicOperations.FixedTimeEquals(expectedTag, actual); }
-        finally { CryptographicOperations.ZeroMemory(actual); }
+        try { return Arrays.FixedTimeEquals(expectedTag.ToArray(), actual); }
+        finally { SecureMemory.Clear(actual); }
     }
 
     private static byte[] ComputeHmac(byte[] key, byte[] data, NistHashAlgorithm hash)

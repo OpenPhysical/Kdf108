@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Parameters;
 
@@ -78,9 +78,9 @@ public static class Sp800108Kmac
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(key);
-            CryptographicOperations.ZeroMemory(customization);
-            CryptographicOperations.ZeroMemory(input);
+            SecureMemory.Clear(key);
+            SecureMemory.Clear(customization);
+            SecureMemory.Clear(input);
         }
     }
 }

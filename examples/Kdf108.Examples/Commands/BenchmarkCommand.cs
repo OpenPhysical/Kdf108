@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Kdf108.Domain.Sp80056A;
 using Kdf108.Simple;
@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Kdf108.Examples.Infrastructure;
+using Org.BouncyCastle.Security;
 
 namespace Kdf108.Examples.Commands;
 
@@ -37,7 +38,7 @@ public class BenchmarkCommand : AsyncCommand<BenchmarkCommand.Settings>
         public bool IncludeEcdh { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings)
+    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken)
     {
         var loggerFactory = LoggingSetup.CreateLoggerFactory(settings.Verbose);
         var logger = loggerFactory.CreateLogger<BenchmarkCommand>();
@@ -73,10 +74,7 @@ public class BenchmarkCommand : AsyncCommand<BenchmarkCommand.Settings>
         AnsiConsole.WriteLine();
 
         var masterKey = new byte[32];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(masterKey);
-        }
+        new SecureRandom().NextBytes(masterKey);
         var context = System.Text.Encoding.UTF8.GetBytes("benchmark-context");
 
         var benchmarks = new[]

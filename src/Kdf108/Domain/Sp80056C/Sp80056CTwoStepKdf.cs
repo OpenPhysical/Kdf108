@@ -3,7 +3,7 @@
 
 using System;
 using System.IO;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using Kdf108.Domain.Interfaces.KeyAgreement;
 using Kdf108.Domain.Kdf;
 using Kdf108.Domain.Sp80056A;
@@ -66,7 +66,7 @@ internal class Sp80056CTwoStepKdf : ISp80056CKeyDerivationPipeline
             }
             finally
             {
-                CryptographicOperations.ZeroMemory(sharedSecret);
+                SecureMemory.Clear(sharedSecret);
             }
         }
         catch (Exception ex)

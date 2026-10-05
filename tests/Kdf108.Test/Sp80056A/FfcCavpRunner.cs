@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using Kdf108.Domain.Sp80056A;
 using NUnit.Framework;
 
@@ -55,7 +54,7 @@ internal static class FfcCavpRunner
         {
             actual = ComputeZ(vector);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or CryptographicException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             failure = ex;
         }
@@ -95,7 +94,7 @@ internal static class FfcCavpRunner
     {
         var pair = FfcStaticKeyPair.FromPrivate(domain, Field(vector, "XstatIUT"));
         if (!pair.PublicKey.Export().AsSpan().SequenceEqual(Field(vector, "YstatIUT")))
-            throw new CryptographicException("The IUT static key pair is inconsistent.");
+            throw new InvalidOperationException("The IUT static key pair is inconsistent.");
         return pair;
     }
 
@@ -103,7 +102,7 @@ internal static class FfcCavpRunner
     {
         var pair = FfcEphemeralKeyPair.FromPrivate(domain, Field(vector, "XephemIUT"));
         if (!pair.PublicKey.Export().AsSpan().SequenceEqual(Field(vector, "YephemIUT")))
-            throw new CryptographicException("The IUT ephemeral key pair is inconsistent.");
+            throw new InvalidOperationException("The IUT ephemeral key pair is inconsistent.");
         return pair;
     }
 

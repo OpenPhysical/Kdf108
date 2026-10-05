@@ -3,10 +3,12 @@
 
 using System;
 using System.Linq;
-using System.Security.Cryptography;
 using AwesomeAssertions;
 using Kdf108.Domain.Sp80056A;
 using Kdf108.Domain.Sp80056C;
+using Org.BouncyCastle.Crypto.Digests;
+using Org.BouncyCastle.Crypto.Macs;
+using Org.BouncyCastle.Crypto.Parameters;
 
 namespace Kdf108.Test.Sp80056A;
 
@@ -48,7 +50,7 @@ public class KeyConfirmationTests
         var expectedData = "KC_1_UUV"u8.ToArray()
             .Concat(new byte[] { 0x01, 0x02, 0x03, (byte)'T' })
             .ToArray();
-        var expected = HMACSHA256.HashData(key, expectedData).AsSpan(0, 16).ToArray();
+        var expected = HmacSha256(key, expectedData).AsSpan(0, 16).ToArray();
 
         var actual = Sp80056AKeyConfirmation.GenerateTag(
             key,
@@ -71,7 +73,7 @@ public class KeyConfirmationTests
             new byte[] { 0x01 },
             new byte[] { 0x02 });
         var key = new byte[32];
-        var expected = HMACSHA256.HashData(
+        var expected = HmacSha256(
             key,
             "KC_2_VVU"u8.ToArray().Concat(new byte[] { 0x02, 0x01 }).ToArray())
             .AsSpan(0, 16)
@@ -196,6 +198,16 @@ public class KeyConfirmationTests
             BitLength.Create(128), SecurityStrength.Bits112);
 
         act.Should().Throw<ArgumentException>().WithMessage("*at most 512 bits*");
+    }
+
+    private static byte[] HmacSha256(byte[] key, byte[] data)
+    {
+        var mac = new HMac(new Sha256Digest());
+        mac.Init(new KeyParameter(key));
+        mac.BlockUpdate(data, 0, data.Length);
+        var result = new byte[mac.GetMacSize()];
+        mac.DoFinal(result, 0);
+        return result;
     }
 
     private static KeyConfirmationContext CreateContext() => new(

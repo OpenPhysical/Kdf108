@@ -3,7 +3,7 @@
 
 using System;
 using System.IO;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -177,7 +177,7 @@ public sealed class FeedbackModeKdf : IKdf
         var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, useCounter);
         byte[] resultBuffer = GenerateBlocks(kdk, fixedInput, iv, reps, prf, outputSizeBytes, counterLengthBits, counterLocation, useCounter);
         try { return TruncateToRequestedLength(resultBuffer, outputLengthInBits); }
-        finally { CryptographicOperations.ZeroMemory(resultBuffer); }
+        finally { SecureMemory.Clear(resultBuffer); }
     }
 
     /// <summary>
@@ -250,16 +250,16 @@ public sealed class FeedbackModeKdf : IKdf
                 byte[] prfInput = CreatePrfInput(currentK, fixedInput, i, counterLengthBits, counterLocation, useCounter);
                 byte[] nextK;
                 try { nextK = prf.Compute(kdk, prfInput); }
-                finally { CryptographicOperations.ZeroMemory(prfInput); }
-                CryptographicOperations.ZeroMemory(currentK);
+                finally { SecureMemory.Clear(prfInput); }
+                SecureMemory.Clear(currentK);
                 currentK = nextK;
                 Buffer.BlockCopy(currentK, 0, resultBuffer, offset, outputSizeBytes);
                 offset += outputSizeBytes;
             }
             return resultBuffer;
         }
-        catch { CryptographicOperations.ZeroMemory(resultBuffer); throw; }
-        finally { CryptographicOperations.ZeroMemory(currentK); }
+        catch { SecureMemory.Clear(resultBuffer); throw; }
+        finally { SecureMemory.Clear(currentK); }
     }
 
     /// <summary>

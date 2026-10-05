@@ -1,13 +1,14 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Kdf108.Domain.Sp80056A;
 using Kdf108.Simple;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Org.BouncyCastle.Security;
 using Kdf108.Examples.Infrastructure;
 
 namespace Kdf108.Examples.Commands;
@@ -26,7 +27,7 @@ public class InteractiveCommand : AsyncCommand<InteractiveCommand.Settings>
         public bool Verbose { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings)
+    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken)
     {
         var loggerFactory = LoggingSetup.CreateLoggerFactory(settings.Verbose);
         var logger = loggerFactory.CreateLogger<InteractiveCommand>();
@@ -166,10 +167,7 @@ public class InteractiveCommand : AsyncCommand<InteractiveCommand.Settings>
         if (useRandomKey)
         {
             masterKey = new byte[32];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(masterKey);
-            }
+            new SecureRandom().NextBytes(masterKey);
             AnsiConsole.MarkupLine($"[bold]Generated Master Key:[/] [yellow]{Convert.ToHexString(masterKey)}[/]");
         }
         else
@@ -527,10 +525,7 @@ public class InteractiveCommand : AsyncCommand<InteractiveCommand.Settings>
 
         // Get master key
         var masterKey = new byte[32];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(masterKey);
-        }
+        new SecureRandom().NextBytes(masterKey);
         AnsiConsole.MarkupLine($"[bold]Master Key:[/] {Convert.ToHexString(masterKey)}");
         AnsiConsole.WriteLine();
 
@@ -766,10 +761,7 @@ public class InteractiveCommand : AsyncCommand<InteractiveCommand.Settings>
         
         // Generate demonstration based on selection
         var masterKey = new byte[32];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(masterKey);
-        }
+        new SecureRandom().NextBytes(masterKey);
         var purpose = "demo-mode-comparison";
         var outputLength = 32;
         

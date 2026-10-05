@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
 using System.Linq;
 using System.Threading.Tasks;
 using Kdf108.Simple;
@@ -26,7 +27,7 @@ public class ComplianceCheckCommand : AsyncCommand<ComplianceCheckCommand.Settin
         public bool Verbose { get; init; }
     }
 
-    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings)
+    public override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken)
     {
         var loggerFactory = LoggingSetup.CreateLoggerFactory(settings.Verbose);
         var logger = loggerFactory.CreateLogger<ComplianceCheckCommand>();

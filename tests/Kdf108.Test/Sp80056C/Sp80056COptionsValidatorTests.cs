@@ -60,10 +60,10 @@ public class Sp80056COptionsValidatorTests
 
     [Test]
     [Category("InputValidation")]
-    public void Validate_NullOptions_FailsValidation()
+    public void Validate_NullOptions_ThrowsInvalidOperationException()
     {
         // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _validator.Validate((Sp80056COptions)null!));
+        Assert.Throws<InvalidOperationException>(() => _validator.Validate((Sp80056COptions)null!));
     }
 
     [Test]

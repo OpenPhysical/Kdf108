@@ -4,7 +4,7 @@
 #pragma warning disable CS1591
 
 using System;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 
 namespace Kdf108.Domain.Sp80056A;
 
@@ -84,8 +84,8 @@ public static class FfcSchemes
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(first);
-            CryptographicOperations.ZeroMemory(second);
+            SecureMemory.Clear(first);
+            SecureMemory.Clear(second);
         }
     }
 }

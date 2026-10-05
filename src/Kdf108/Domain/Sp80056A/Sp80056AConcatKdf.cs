@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
-using System.Security.Cryptography;
-using Kdf108.Infrastructure.Cryptography;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Digests;
 
 namespace Kdf108.Domain.Sp80056A;
 
@@ -35,7 +35,7 @@ public static class Sp80056AConcatKdf
     /// <exception cref="ArgumentException">
     /// Thrown when the output length is zero or negative, or when an unsupported hash algorithm is specified.
     /// </exception>
-    public static byte[] DeriveKeyMaterial(byte[] sharedSecret, byte[] otherInfo, int outputLengthBytes, HashAlgorithm hashAlgorithm)
+    public static byte[] DeriveKeyMaterial(byte[] sharedSecret, byte[] otherInfo, int outputLengthBytes, IDigest hashAlgorithm)
     {
         if (sharedSecret == null)
             throw new ArgumentNullException(nameof(sharedSecret));
@@ -46,7 +46,7 @@ public static class Sp80056AConcatKdf
         if (outputLengthBytes <= 0)
             throw new ArgumentException("Output length must be positive", nameof(outputLengthBytes));
 
-        var hashLengthBytes = hashAlgorithm.HashSize / 8;
+        var hashLengthBytes = hashAlgorithm.GetDigestSize();
         var iterations = (int)Math.Ceiling((double)outputLengthBytes / hashLengthBytes);
 
         var result = new byte[outputLengthBytes];
@@ -65,7 +65,9 @@ public static class Sp80056AConcatKdf
             Array.Copy(sharedSecret, 0, inputData, counter.Length, sharedSecret.Length);
             Array.Copy(otherInfo, 0, inputData, counter.Length + sharedSecret.Length, otherInfo.Length);
 
-            var hashOutput = hashAlgorithm.ComputeHash(inputData);
+            hashAlgorithm.BlockUpdate(inputData, 0, inputData.Length);
+            var hashOutput = new byte[hashLengthBytes];
+            hashAlgorithm.DoFinal(hashOutput, 0);
 
             var bytesToCopy = Math.Min(hashOutput.Length, outputLengthBytes - offset);
             Array.Copy(hashOutput, 0, result, offset, bytesToCopy);
@@ -91,7 +93,7 @@ public static class Sp80056AConcatKdf
     /// </exception>
     public static byte[] DeriveKeyMaterial(byte[] sharedSecret, byte[] otherInfo, int outputLengthBytes, string hashAlgorithmName)
     {
-        using var hashAlgorithm = CreateHashAlgorithm(hashAlgorithmName);
+        var hashAlgorithm = CreateHashAlgorithm(hashAlgorithmName);
         return DeriveKeyMaterial(sharedSecret, otherInfo, outputLengthBytes, hashAlgorithm);
     }
 
@@ -99,22 +101,22 @@ public static class Sp80056AConcatKdf
     /// Creates a hash algorithm instance based on the specified algorithm name.
     /// </summary>
     /// <param name="hashAlgorithmName">The name of the hash algorithm.</param>
-    /// <returns>A HashAlgorithm instance for the specified algorithm.</returns>
+    /// <returns>A Bouncy Castle digest for the specified algorithm.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm name is specified.</exception>
-    private static HashAlgorithm CreateHashAlgorithm(string hashAlgorithmName)
+    private static IDigest CreateHashAlgorithm(string hashAlgorithmName)
     {
         return hashAlgorithmName switch
         {
-            "SHA1" => SHA1.Create(),
-            "SHA-1" => SHA1.Create(),
-            "SHA224" => new Sha224HashAlgorithm(),
-            "SHA-224" => new Sha224HashAlgorithm(),
-            "SHA256" => SHA256.Create(),
-            "SHA-256" => SHA256.Create(),
-            "SHA384" => SHA384.Create(),
-            "SHA-384" => SHA384.Create(),
-            "SHA512" => SHA512.Create(),
-            "SHA-512" => SHA512.Create(),
+            "SHA1" => new Sha1Digest(),
+            "SHA-1" => new Sha1Digest(),
+            "SHA224" => new Sha224Digest(),
+            "SHA-224" => new Sha224Digest(),
+            "SHA256" => new Sha256Digest(),
+            "SHA-256" => new Sha256Digest(),
+            "SHA384" => new Sha384Digest(),
+            "SHA-384" => new Sha384Digest(),
+            "SHA512" => new Sha512Digest(),
+            "SHA-512" => new Sha512Digest(),
             _ => throw new ArgumentException($"Unsupported hash algorithm: {hashAlgorithmName}", nameof(hashAlgorithmName))
         };
     }

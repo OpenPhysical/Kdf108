@@ -198,7 +198,7 @@ Clean, minimal examples focusing on core functionality without complex UI.
 ### Common Issues
 
 1. **"No such file or directory"** - Ensure you're running from the project root
-2. **log4net errors on macOS** - These are cosmetic warnings and don't affect functionality
+2. **Console logging output** - Use `--verbose` to include debug-level diagnostics
 3. **Build errors** - Run `dotnet restore` and `dotnet build` in the solution root
 4. **Permission denied** - Make scripts executable with `chmod +x kdf108-examples.sh`
 

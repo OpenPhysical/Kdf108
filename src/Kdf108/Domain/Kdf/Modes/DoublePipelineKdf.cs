@@ -4,7 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -151,11 +151,11 @@ public sealed class DoublePipelineKdf : IKdf
             byte[] resultBuffer = GenerateKValues(kdk, prf, fixedInput, aValues, reps, outputSizeBytes,
                 counterLengthBits, counterLocation, useCounter);
             try { return TruncateToRequestedLength(resultBuffer, outputLengthInBits); }
-            finally { CryptographicOperations.ZeroMemory(resultBuffer); }
+            finally { SecureMemory.Clear(resultBuffer); }
         }
         finally
         {
-            for (int i = 1; i < aValues.Count; i++) CryptographicOperations.ZeroMemory(aValues[i]);
+            for (int i = 1; i < aValues.Count; i++) SecureMemory.Clear(aValues[i]);
         }
     }
 
@@ -254,10 +254,10 @@ public sealed class DoublePipelineKdf : IKdf
             {
                 byte[] block = prf.Compute(kdk, prfInput);
                 try { Buffer.BlockCopy(block, 0, resultBuffer, offset, outputSizeBytes); }
-                finally { CryptographicOperations.ZeroMemory(block); }
+                finally { SecureMemory.Clear(block); }
                 offset += outputSizeBytes;
             }
-            finally { CryptographicOperations.ZeroMemory(prfInput); }
+            finally { SecureMemory.Clear(prfInput); }
         }
 
         return resultBuffer;

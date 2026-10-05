@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using AwesomeAssertions;
 using Kdf108.Domain.Sp80056A;
 using Microsoft.Extensions.Logging.Testing;
@@ -189,7 +188,7 @@ internal class Sp80056AEccCavpComputer
         bool keyMutation = description.Contains("public key", StringComparison.OrdinalIgnoreCase) ||
             description.Contains("private key", StringComparison.OrdinalIgnoreCase) ||
             description.Contains("prikey", StringComparison.OrdinalIgnoreCase);
-        return keyMutation && exception is ArgumentException or CryptographicException or InvalidOperationException;
+        return keyMutation && exception is ArgumentException or InvalidOperationException;
     }
 
     /// <summary>

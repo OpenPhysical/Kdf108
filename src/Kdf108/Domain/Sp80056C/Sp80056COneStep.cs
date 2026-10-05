@@ -4,7 +4,7 @@
 #pragma warning disable CS1591
 
 using System;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using Kdf108.Domain.Kdf;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
@@ -51,7 +51,7 @@ public static class Sp80056COneStep
                 }
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(input);
+                    SecureMemory.Clear(input);
                 }
 
                 try
@@ -62,7 +62,7 @@ public static class Sp80056COneStep
                 }
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(block);
+                    SecureMemory.Clear(block);
                 }
             }
 
@@ -71,8 +71,8 @@ public static class Sp80056COneStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(z);
-            CryptographicOperations.ZeroMemory(fixedInfo);
+            SecureMemory.Clear(z);
+            SecureMemory.Clear(fixedInfo);
         }
     }
 
@@ -122,7 +122,7 @@ public static class Sp80056COneStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(salt);
+            SecureMemory.Clear(salt);
         }
     }
 
@@ -141,7 +141,7 @@ public static class Sp80056COneStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(salt);
+            SecureMemory.Clear(salt);
         }
     }
 

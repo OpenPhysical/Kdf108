@@ -6,7 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using Kdf108.Domain.Kdf;
 
 namespace Kdf108.Domain.Sp80056C;
@@ -87,7 +87,7 @@ public abstract class OneStepAuxiliaryFunction : IDisposable
         public NistHashAlgorithm Algorithm { get; }
         public bool UsesDefaultSalt => _salt is null;
         internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
-        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) SecureMemory.Clear(_salt); _disposed = true; }
     }
 
     public sealed class Kmac : OneStepAuxiliaryFunction
@@ -106,7 +106,7 @@ public abstract class OneStepAuxiliaryFunction : IDisposable
         public BitLength OutputLength { get; }
         public bool UsesDefaultSalt => _salt is null;
         internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
-        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) SecureMemory.Clear(_salt); _disposed = true; }
     }
 
     public static OneStepAuxiliaryFunction HashFunction(NistHashAlgorithm algorithm) => new Hash(algorithm);
@@ -176,7 +176,7 @@ public sealed class OneStepKdfRequest : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        CryptographicOperations.ZeroMemory(_sharedSecret);
+        SecureMemory.Clear(_sharedSecret);
         AuxiliaryFunction.Dispose();
         _disposed = true;
     }
@@ -213,7 +213,7 @@ public abstract class TwoStepExtraction : IDisposable
         internal Hmac(NistHashAlgorithm algorithm, byte[]? salt) { Algorithm = algorithm; _salt = salt?.ToArray(); }
         public NistHashAlgorithm Algorithm { get; }
         internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
-        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) SecureMemory.Clear(_salt); _disposed = true; }
     }
 
     public sealed class AesCmac : TwoStepExtraction
@@ -223,7 +223,7 @@ public abstract class TwoStepExtraction : IDisposable
         internal AesCmac(int keyBits, byte[]? salt) { KeyBits = keyBits; _salt = salt?.ToArray(); }
         public int KeyBits { get; }
         internal byte[]? CopySalt() { ObjectDisposedException.ThrowIf(_disposed, this); return _salt?.ToArray(); }
-        public override void Dispose() { if (_disposed) return; if (_salt is not null) CryptographicOperations.ZeroMemory(_salt); _disposed = true; }
+        public override void Dispose() { if (_disposed) return; if (_salt is not null) SecureMemory.Clear(_salt); _disposed = true; }
     }
 
     public static TwoStepExtraction HmacFunction(NistHashAlgorithm algorithm, ReadOnlySpan<byte> salt = default)
@@ -336,7 +336,7 @@ public sealed class TwoStepKdfRequest : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        CryptographicOperations.ZeroMemory(_sharedSecret);
+        SecureMemory.Clear(_sharedSecret);
         Extraction.Dispose();
         _disposed = true;
     }

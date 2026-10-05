@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -196,7 +196,7 @@ public sealed class CounterModeKdf : IKdf
         var (reps, _) = KdfOutputLimits.Validate(outputLengthInBits, outputSizeBits, counterLengthBits, true);
         var blocks = GenerateBlocks(kdk, reps, fixedInput, prf, counterLocation, counterLengthBits);
         try { return TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes); }
-        finally { foreach (var block in blocks) CryptographicOperations.ZeroMemory(block); }
+        finally { foreach (var block in blocks) SecureMemory.Clear(block); }
     }
 
     /// <summary>
@@ -245,9 +245,9 @@ public sealed class CounterModeKdf : IKdf
                 byte[] counterBytes = CreateCounter(counter, counterLengthBits);
                 byte[] prfInput;
                 try { prfInput = CreatePrfInput(counterBytes, fixedInput, counterLocation, null); }
-                finally { CryptographicOperations.ZeroMemory(counterBytes); }
+                finally { SecureMemory.Clear(counterBytes); }
                 try { return prf.Compute(kdk, prfInput); }
-                finally { CryptographicOperations.ZeroMemory(prfInput); }
+                finally { SecureMemory.Clear(prfInput); }
             });
     }
 
@@ -348,7 +348,7 @@ public sealed class CounterModeKdf : IKdf
             .ToList();
 
         try { return TruncateToRequestedLength(blocks, outputLengthInBits, outputSizeBytes); }
-        finally { foreach (var block in blocks) CryptographicOperations.ZeroMemory(block); }
+        finally { foreach (var block in blocks) SecureMemory.Clear(block); }
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public sealed class CounterModeKdf : IKdf
 
         byte[] input = stream.ToArray();
         try { return prf.Compute(kdk, input); }
-        finally { CryptographicOperations.ZeroMemory(input); }
+        finally { SecureMemory.Clear(input); }
     }
 
     /// <summary>

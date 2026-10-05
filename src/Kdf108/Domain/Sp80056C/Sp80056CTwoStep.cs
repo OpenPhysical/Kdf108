@@ -5,7 +5,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
+using Kdf108.Internal;
 using Kdf108.Domain.Kdf;
 using Kdf108.Domain.Kdf.Modes;
 using Org.BouncyCastle.Crypto.Engines;
@@ -35,14 +35,14 @@ public static class Sp80056CTwoStep
         catch
         {
             foreach (var result in results)
-                CryptographicOperations.ZeroMemory(result);
+                SecureMemory.Clear(result);
             throw;
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(z);
+            SecureMemory.Clear(z);
             if (kdk is not null)
-                CryptographicOperations.ZeroMemory(kdk);
+                SecureMemory.Clear(kdk);
         }
     }
 
@@ -70,7 +70,7 @@ public static class Sp80056CTwoStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(salt);
+            SecureMemory.Clear(salt);
         }
     }
 
@@ -88,7 +88,7 @@ public static class Sp80056CTwoStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(salt);
+            SecureMemory.Clear(salt);
         }
     }
 
@@ -121,7 +121,7 @@ public static class Sp80056CTwoStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(fixedInfo);
+            SecureMemory.Clear(fixedInfo);
         }
     }
 
@@ -139,7 +139,7 @@ public static class Sp80056CTwoStep
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(iv);
+            SecureMemory.Clear(iv);
         }
     }
 }
