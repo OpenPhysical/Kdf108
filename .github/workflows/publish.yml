@@ -20,6 +20,7 @@ jobs:
 
     permissions:
       contents: read
+      id-token: write  # NuGet trusted publishing exchanges this job's OIDC token for a short-lived API key
 
     steps:
       - name: Checkout source
@@ -90,7 +91,37 @@ jobs:
       - name: Pack NuGet package
         run: dotnet pack src/Kdf108/Kdf108.csproj -c Release -o ./nupkg
 
+      - name: Log in to NuGet.org (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+        with:
+          user: mistial-dev
+
       - name: Push tested package to NuGet.org
         env:
           GATE_REASON: A version collision indicates an unexpected release-state mismatch and must fail visibly.
-        run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+
+      # Earlier versions stay restorable by exact version; unlisting only hides them from search
+      # and "latest". Only versions lower than this release are unlisted, so a patch to an older
+      # major never hides a newer one.
+      - name: Unlist earlier versions
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $released = [System.Management.Automation.SemanticVersion]::Parse($env:RELEASE_TAG.TrimStart('v'))
+          $index = Invoke-RestMethod 'https://api.nuget.org/v3/registration5-gz-semver2/kdf108/index.json'
+          foreach ($page in $index.items) {
+            $items = if ($page.items) { $page.items } else { (Invoke-RestMethod $page.'@id').items }
+            foreach ($entry in $items.catalogEntry) {
+              $version = [System.Management.Automation.SemanticVersion]::Parse(($entry.version -split '\+')[0])
+              $listed = $null -eq $entry.listed -or $entry.listed
+              if ($listed -and $version -lt $released) {
+                Write-Host "Unlisting Kdf108 $($entry.version)"
+                dotnet nuget delete Kdf108 $entry.version --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY --non-interactive
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              }
+            }
+          }
