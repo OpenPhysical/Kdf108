@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Kdf108.Test.Sp80056A;
 
@@ -18,13 +19,20 @@ public static class CavpTestVectorParser
     /// <returns>Collection of parsed test vectors.</returns>
     public static IEnumerable<CavpTestVector> ParseFile(string filePath)
     {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("Required CAVP vector file was not found.", filePath);
+
         var lines = File.ReadAllLines(filePath);
         var vectors = new List<CavpTestVector>();
         
         string? currentParameterSet = null;
         string? currentCurve = null;
         string? currentHash = null;
-        var currentVector = new CavpTestVector();
+        string? currentMacAlgorithm = null;
+        string? currentMacVariant = null;
+        var metadata = CavpSourceMetadata.FromPath(filePath);
+        var currentVector = new CavpTestVector { Source = metadata };
+        var sectionFields = new Dictionary<string, string>(StringComparer.Ordinal);
         
         // Track parameter set to curve mapping for this file
         var parameterSetToCurve = new Dictionary<string, string>();
@@ -81,6 +89,17 @@ public static class CavpTestVectorParser
                         }
                     }
                 }
+                else if (section.StartsWith("MAC algorithm supported:", StringComparison.Ordinal))
+                {
+                    currentMacAlgorithm = section.Split(':', 2)[1].Trim();
+                }
+                else if (section.StartsWith("CCM AES", StringComparison.Ordinal) ||
+                         section.StartsWith("CMAC AES", StringComparison.Ordinal) ||
+                         section.StartsWith("HMAC SHA", StringComparison.Ordinal))
+                {
+                    currentMacVariant = section;
+                    currentMacAlgorithm = section.Split(' ', 2)[0];
+                }
                 continue;
             }
             
@@ -108,8 +127,13 @@ public static class CavpTestVectorParser
                                 Count = int.Parse(value),
                                 ParameterSet = currentParameterSet,
                                 Curve = currentCurve,
-                                Hash = currentHash
+                                Hash = currentHash,
+                                Source = metadata,
+                                MacAlgorithm = currentMacAlgorithm,
+                                MacVariant = currentMacVariant
                             };
+                            foreach (var pair in sectionFields)
+                                currentVector.Fields.Add(pair.Key, pair.Value);
                             break;
                             
                         case "deCAVS":
@@ -192,6 +216,11 @@ public static class CavpTestVectorParser
                             currentVector.Result = value;
                             break;
                     }
+
+                    if (key is "P" or "Q" or "G")
+                        sectionFields[key] = value;
+                    else if (!currentVector.Fields.TryAdd(key, value))
+                        throw new InvalidDataException($"Duplicate field '{key}' in {filePath}, vector {currentVector.Count}.");
                 }
             }
         }
@@ -202,6 +231,9 @@ public static class CavpTestVectorParser
             vectors.Add(currentVector);
         }
         
+        foreach (var vector in vectors)
+            vector.ValidateMetadata();
+
         return vectors;
     }
     
@@ -267,6 +299,10 @@ public class CavpTestVector
     public string? ParameterSet { get; set; }
     public string? Curve { get; set; }
     public string? Hash { get; set; }
+    public CavpSourceMetadata Source { get; set; } = CavpSourceMetadata.Unknown;
+    public string? MacAlgorithm { get; set; }
+    public string? MacVariant { get; set; }
+    public Dictionary<string, string> Fields { get; } = new(StringComparer.Ordinal);
     
     // Ephemeral private keys
     public byte[]? DeCAVS { get; set; }
@@ -332,6 +368,26 @@ public class CavpTestVector
             return null;
         }
     }
+
+    public int ResultCode => int.Parse(
+        Regex.Match(Result ?? string.Empty, @"^[PF]\s*\((\d+)\s*-").Groups[1].Value,
+        CultureInfo.InvariantCulture);
+
+    internal void ValidateMetadata()
+    {
+        if (!Count.HasValue)
+            throw new InvalidDataException($"Vector in {Source.FilePath} has no COUNT.");
+        if (string.IsNullOrWhiteSpace(ParameterSet))
+            throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has no parameter set.");
+        if (Source.Family == CavpFamily.Ecc && string.IsNullOrWhiteSpace(Curve))
+            throw new InvalidDataException($"ECC vector {Count} in {Source.FilePath} has no curve metadata.");
+        if (string.IsNullOrWhiteSpace(Result) || !Regex.IsMatch(Result, @"^[PF]\s*\(\d+\s*-.*\)$"))
+            throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has malformed Result metadata: '{Result}'.");
+        if (ExpectPass && ResultCode is not (0 or 10 or 11 or 13 or 14))
+            throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has unknown passing result code {ResultCode}.");
+        if (ExpectFail && ResultCode is < 1 or > 12)
+            throw new InvalidDataException($"Vector {Count} in {Source.FilePath} has unknown failing result code {ResultCode}.");
+    }
     
     /// <summary>
     /// Gets the error description from the result field.
@@ -363,5 +419,43 @@ public class CavpTestVector
     public override string ToString()
     {
         return $"Count={Count}, ParameterSet={ParameterSet}, Curve={Curve}, Hash={Hash}, Result={Result}";
+    }
+}
+
+public enum CavpFamily { Ecc, Ffc, Unknown }
+public enum CavpStage { Zz, KdfNoKeyConfirmation, KeyConfirmation, Unknown }
+
+public sealed record CavpSourceMetadata(
+    string FilePath,
+    CavpFamily Family,
+    CavpStage Stage,
+    string Scheme,
+    string Role)
+{
+    public static CavpSourceMetadata Unknown { get; } =
+        new(string.Empty, CavpFamily.Unknown, CavpStage.Unknown, string.Empty, string.Empty);
+
+    public static CavpSourceMetadata FromPath(string filePath)
+    {
+        string normalized = filePath.Replace('\\', '/');
+        var family = normalized.Contains("KASTestVectorsECC2016", StringComparison.Ordinal)
+            ? CavpFamily.Ecc
+            : normalized.Contains("KASTestVectorsFFC2016", StringComparison.Ordinal)
+                ? CavpFamily.Ffc
+                : CavpFamily.Unknown;
+        var stage = normalized.Contains("Test of 800-56A excluding KDF", StringComparison.Ordinal)
+            ? CavpStage.Zz
+            : normalized.Contains("No Key Confirmation", StringComparison.Ordinal)
+                ? CavpStage.KdfNoKeyConfirmation
+                : normalized.Contains("Key Confirmation", StringComparison.Ordinal)
+                    ? CavpStage.KeyConfirmation
+                    : CavpStage.Unknown;
+        string scheme = Directory.GetParent(filePath)?.Name ?? string.Empty;
+        string name = Path.GetFileNameWithoutExtension(filePath);
+        string role = name.Contains("_init", StringComparison.Ordinal) ? "initiator" :
+            name.Contains("_resp", StringComparison.Ordinal) ? "responder" : string.Empty;
+        if (family == CavpFamily.Unknown || stage == CavpStage.Unknown || role.Length == 0)
+            throw new InvalidDataException($"Cannot classify CAVP source path '{filePath}'.");
+        return new CavpSourceMetadata(filePath, family, stage, scheme, role);
     }
 }
