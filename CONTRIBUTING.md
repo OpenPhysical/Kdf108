@@ -3,6 +3,11 @@
 Kdf108 welcomes focused technical contributions that improve its SP 800-108 implementation,
 tests, documentation, packaging, or supported integrations.
 
+
+The current first-party source license is GPL-2.0-or-later, effective for this release work on
+2026-11-16. The retained version 1.0 contributor assignment is historical agreement text;
+this licensing change does not rewrite previously accepted agreements or their promises.
+
 ## Before contributing
 
 Participation is governed by the [Bounded Contribution Policy](CODE_OF_CONDUCT.md). Code and
@@ -10,7 +15,7 @@ documentation contributions also require acceptance of the
 [Contributor Copyright Assignment](CONTRIBUTOR_ASSIGNMENT.md) through the repository's CLA check.
 
 The assignment preserves OpenPhysical's ability to offer commercial licenses while promising that
-accepted contributions remain available under the repository's AGPL license. A contributor keeps a
+accepted contributions remain available under the repository's GPL license. A contributor keeps a
 broad license to reuse their own contribution.
 
 If an employer or another organization owns your contribution, an authorized representative must
