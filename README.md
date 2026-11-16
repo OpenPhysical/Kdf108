@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/OpenPhysical/Kdf108/actions/workflows/build.yml/badge.svg)](https://github.com/OpenPhysical/Kdf108/actions/workflows/build.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://openphysical.github.io/Kdf108/)
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
+[![License: GPL v2 or later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 
 Kdf108 is a small .NET library for the NIST key-establishment toolkit:
 
@@ -107,8 +107,8 @@ make cavp       # every NIST CAVP vector, verified exactly as CI does (a couple 
 
 ## Contributing and licensing
 
-Kdf108 is licensed under the [GNU Affero General Public License v3.0 only](LICENSE)
-(`AGPL-3.0-only`). If you need different terms, ask about a
+Kdf108 is licensed under the [GNU General Public License version 2 or later](LICENSE)
+(`GPL-2.0-or-later`). If you need different terms, ask about a
 [commercial license](COMMERCIAL-LICENSING.md).
 
 Before contributing, please read the [contributing guide](CONTRIBUTING.md), the
